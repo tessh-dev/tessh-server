@@ -1,0 +1,24 @@
+services:
+  tessh-server:
+    image: ghcr.io/bobzth/tessh-server:latest
+    build: .
+    container_name: tessh-server
+    restart: unless-stopped
+    environment:
+      # Required: the address people and apps use to reach this server (your reverse proxy's HTTPS URL).
+      PUBLIC_URL: https://sync.example.com
+      # open | invite | closed. With invite, add people under Invites in the admin panel first.
+      SIGNUPS: invite
+      SERVER_NAME: Tessh
+      # Turns the admin panel on. Put it in a .env file next to this one: ADMIN_PASSWORD=...
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    ports:
+      # The API and key pages. Put a reverse proxy with HTTPS in front of this.
+      - "127.0.0.1:8080:8080"
+      # The admin panel: reachable from this machine only. Use an SSH tunnel or your VPN to open it.
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - tessh-data:/data
+
+volumes:
+  tessh-data:
