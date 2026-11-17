@@ -1,0 +1,77 @@
+{
+  "authorizedKeys" : "# tessh-keys seq=5 updated=2025-11-15T09:46:40.000Z\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 MacBook-Air\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICBAQONkwQ8r7Jwf5QChzUwkfInWUKAe1+gsq6hnh3wh iPhone\n",
+  "authorizedKeysSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgGX9rI+FshTLGq8g4+s1ep4m+DH\naykgM0A5v6iz02jWEAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAEAhye/i1qS1tITGRR7BnCw+0JKnhe40bilKkv2by1EzJqOI0ozfqChBH9\n9JNXvRYLmrpq8ogeqocEDvPrvrt0AA\n-----END SSH SIGNATURE-----\n",
+  "badAuthorizedKeysSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg6kpsY+KcUgq+9VB7Ey7F+ZVHdq\n6+vnuSQh7qaRRG0iwAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAEBMUtLowRmxxFLDT8eCwmxmhI8nWUksP2uSgRNIbOwNL25KOI9Dac3RMn\nicEyXKyfFkcTDNmump4oMc7K13eKUM\n-----END SSH SIGNATURE-----\n",
+  "keys" : [
+    {
+      "addedAt" : "2025-11-13T02:13:20Z",
+      "device" : "Alice's MacBook Air",
+      "fingerprint" : "SHA256:2HS8bJpYBy7bDfWIQN304coFKT0s6CVPABFLYq+IX5E",
+      "label" : "MacBook Air",
+      "name" : "MacBook-Air",
+      "type" : "ssh-ed25519"
+    },
+    {
+      "addedAt" : "2025-11-14T06:00:00Z",
+      "fingerprint" : "SHA256:fEwl/gSmEu2rNjSfMxOVgeWCDJoI93yKQrq9RNR+wJ8",
+      "label" : "iPhone",
+      "name" : "iPhone",
+      "type" : "ssh-ed25519"
+    }
+  ],
+  "newer" : {
+    "authorizedKeys" : "# tessh-keys seq=6 updated=2025-11-15T09:47:40.000Z\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 MacBook-Air\n",
+    "authorizedKeysSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgGX9rI+FshTLGq8g4+s1ep4m+DH\naykgM0A5v6iz02jWEAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAEAF7C2IElrwn2YU5mUGeXOHve5UYi8Q5x1IABf+nePJkNRB7Sz9KNN5YF\nZ8+jhRWgnv9dLdslkh+wmJEkEcXZoI\n-----END SSH SIGNATURE-----\n",
+    "keys" : [
+      {
+        "addedAt" : "2025-11-13T02:13:20Z",
+        "device" : "Alice's MacBook Air",
+        "fingerprint" : "SHA256:2HS8bJpYBy7bDfWIQN304coFKT0s6CVPABFLYq+IX5E",
+        "label" : "MacBook Air",
+        "name" : "MacBook-Air",
+        "type" : "ssh-ed25519"
+      }
+    ],
+    "revoked" : "# tessh-keys seq=6 updated=2025-11-15T09:47:40.000Z\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbNYIuSi4jlDg7+qjP68cQ87+BylLC4fp/gq6ajz3Yz Old-Mac\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICBAQONkwQ8r7Jwf5QChzUwkfInWUKAe1+gsq6hnh3wh iPhone\n",
+    "revokedSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgGX9rI+FshTLGq8g4+s1ep4m+DH\naykgM0A5v6iz02jWEAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAEB/ymK4rkDvRCG3uqqNHKvB4IxQmEiFV3YZan+NiQ+g3bdEJzQ3F30Ltk\n5A7VAgYn+yQFbxahzdMShyDE4G400I\n-----END SSH SIGNATURE-----\n",
+    "seq" : 6
+  },
+  "older" : {
+    "authorizedKeys" : "# tessh-keys seq=4 updated=2025-11-15T09:45:40.000Z\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 MacBook-Air\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbNYIuSi4jlDg7+qjP68cQ87+BylLC4fp/gq6ajz3Yz Old-Mac\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICBAQONkwQ8r7Jwf5QChzUwkfInWUKAe1+gsq6hnh3wh iPhone\n",
+    "authorizedKeysSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgGX9rI+FshTLGq8g4+s1ep4m+DH\naykgM0A5v6iz02jWEAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAECLg1YwLKWvvDkrwIOMMc3sbYdjmrXDOB+mfoo+5DubNS2LXSdCXsNXN6\nKtzdi5xgfyZgBwtJud7l+YEdSGpVgC\n-----END SSH SIGNATURE-----\n",
+    "keys" : [
+      {
+        "addedAt" : "2025-11-13T02:13:20Z",
+        "device" : "Alice's MacBook Air",
+        "fingerprint" : "SHA256:2HS8bJpYBy7bDfWIQN304coFKT0s6CVPABFLYq+IX5E",
+        "label" : "MacBook Air",
+        "name" : "MacBook-Air",
+        "type" : "ssh-ed25519"
+      },
+      {
+        "addedAt" : "2023-11-14T22:13:20Z",
+        "device" : "Old Mac",
+        "fingerprint" : "SHA256:KLOzCSIr0cqZ0hUBDTNXnmKKPjDJeC0pRivP6FKHNbo",
+        "label" : "Old Mac",
+        "name" : "Old-Mac",
+        "type" : "ssh-ed25519"
+      },
+      {
+        "addedAt" : "2025-11-14T06:00:00Z",
+        "fingerprint" : "SHA256:fEwl/gSmEu2rNjSfMxOVgeWCDJoI93yKQrq9RNR+wJ8",
+        "label" : "iPhone",
+        "name" : "iPhone",
+        "type" : "ssh-ed25519"
+      }
+    ],
+    "revoked" : "# tessh-keys seq=4 updated=2025-11-15T09:45:40.000Z\n",
+    "revokedSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgGX9rI+FshTLGq8g4+s1ep4m+DH\naykgM0A5v6iz02jWEAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAEDGDmdfio8ih1sTyvnTqQVhp/qWU//401VeXnyfWSGE4YBpwhbnsIa2Fo\nX1yR/NloS16WcwZ2lhWAEU1MflndwK\n-----END SSH SIGNATURE-----\n",
+    "seq" : 4
+  },
+  "otherSignerPublicKey" : "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOpKbGPinFIKvvVQexMuxfmVR3auvr57kkIe6mkURtIs",
+  "revoked" : "# tessh-keys seq=5 updated=2025-11-15T09:46:40.000Z\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbNYIuSi4jlDg7+qjP68cQ87+BylLC4fp/gq6ajz3Yz Old-Mac\n",
+  "revokedSig" : "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgGX9rI+FshTLGq8g4+s1ep4m+DH\naykgM0A5v6iz02jWEAAAAKdGVzc2gta2V5cwAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt\nZWQyNTUxOQAAAEBuyTfjp4o+YGIbvKqi1UPMvvcuacwXR4PJ0aev/FTngeTHpBdDZc6VHF\nnq1njHRQBQB0uKO3GX69U5MaBZcoIL\n-----END SSH SIGNATURE-----\n",
+  "seq" : 5,
+  "signerPublicKey" : "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBl/ayPhbIUyxqvIOPrNXqeJvgx2spIDNAOb+os9No1h",
+  "signerSeedHex" : "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+}
