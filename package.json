@@ -1,0 +1,23 @@
+{
+  "name": "tessh-server",
+  "version": "1.0.0",
+  "description": "Self-hostable sync and key page server for the Tessh SSH app",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning dist/main.js",
+    "dev": "node --disable-warning=ExperimentalWarning src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  }
+}
