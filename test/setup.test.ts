@@ -107,6 +107,9 @@ describe("browser setup", () => {
     expect(first.headers.get("cache-control")).toBe("no-store");
     const codePage = await first.text();
     expect(codePage).toContain("Set up your server");
+    // The logs command sits folded behind "Where's the code?", with a copy button.
+    expect(codePage).toMatch(/<details class="where"><summary>[\s\S]*Where's the code\?/);
+    expect(codePage).toContain('data-copy="docker compose logs tessh-server"');
     expect(codePage).toContain(`<script src="${assetURL("setup.js")}" defer></script>`);
     expect(assetURL("setup.js")).toMatch(/^\/_\/setup\.js\?h=[0-9a-f]{10}$/);
     expect(codePage).not.toMatch(/<script(?![^>]*\ssrc=)|<style|\sstyle=/);

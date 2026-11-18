@@ -10,6 +10,7 @@ export const icons = {
   copy: line('<rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 5.5V4.5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h1"/>'),
   server: line('<rect x="2" y="2.5" width="12" height="4.5" rx="1.5"/><rect x="2" y="9" width="12" height="4.5" rx="1.5"/><path d="M4.5 4.8h.01M4.5 11.3h.01"/>'),
   cloud: line('<path d="M4.5 12.5a3 3 0 0 1-.4-5.97A4 4 0 0 1 11.8 6.2 3.2 3.2 0 0 1 11.5 12.5z"/>'),
+  info: line('<circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.8M8 5h.01"/>'),
   plus: line('<path d="M8 3v10M3 8h10"/>'),
   gear: line('<circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3"/>'),
   grid: line('<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2"/>'),

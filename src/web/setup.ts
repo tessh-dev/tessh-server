@@ -229,19 +229,29 @@ const back = (mode: Mode) => (mode === "full" ? `<a class="btn ghost" href="/set
 function expiredStep(mode: Mode): string {
   return `<div class="ocard" data-step="expired">${MARK}${dots(mode, "code")}
 <h3>This setup code has expired</h3>
-<p class="sub">Restart the server for a new one, then find it in the logs under “Not set up yet”.</p>
-<p class="cap">Run <span class="mono">docker compose restart tessh-server</span>, then <span class="mono">docker compose logs tessh-server</span>.</p>
+<p class="sub">Restart the server to get a new one.</p>
+${whereIsCode("docker compose restart tessh-server", `Then run <code>${LOGS_COMMAND}</code> and look for “Setup code”.`)}
 </div>`;
 }
+
+/** The "Where's the code?" help, folded away until asked for: the command to run, with a copy button. */
+function whereIsCode(command = LOGS_COMMAND, note = "Look for “Setup code”."): string {
+  return `<details class="where"><summary>${icons.info}<span>Where's the code?</span></summary>
+<div class="where-box"><p>On the machine running Tessh Server, run:</p>
+<div class="cmd"><code>${command}</code><button type="button" class="btn ghost sm" data-copy="${command}">${icons.copy}<span>Copy</span></button></div>
+<p>${note}</p></div></details>`;
+}
+
+const LOGS_COMMAND = "docker compose logs tessh-server";
 
 function codeStep(mode: Mode, env: Env): string {
   if (codeExpired(env)) return expiredStep(mode);
   return `<form class="ocard" data-step="code" novalidate>${MARK}${dots(mode, "code")}
 <h3>Set up your server</h3>
-<p class="sub">Type the setup code from your server's logs. It's under “Not set up yet”.</p>
+<p class="sub">Type the setup code your server printed when it started.</p>
 <div class="otp-box" data-otp data-length="8" data-charset="code" data-groups="4,4" data-label="Setup code"></div>
 ${ERR}
-<p class="cap">The code is in your server's log. On the machine you installed it on, run <span class="mono">docker compose logs tessh-server</span></p>
+${whereIsCode()}
 </form>`;
 }
 

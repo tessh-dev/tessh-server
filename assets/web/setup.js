@@ -1,5 +1,19 @@
 // Behaviour for the setup pages: each step posts JSON to /setup/api/* and then reloads /setup, which shows
 // the next step. The last step of each flow shows its finished card in place.
+// Copy buttons that carry their text (the "Where's the code?" command), on every setup card.
+document.querySelectorAll('button[data-copy]:not([data-copy=""])').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const label = btn.querySelector('span');
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      label.textContent = 'Copied';
+    } catch (e) {
+      label.textContent = 'Copy failed';
+    }
+    setTimeout(() => { label.textContent = 'Copy'; }, 1600);
+  });
+});
+
 (function () {
   const form = document.querySelector('form[data-step]');
   if (!form) return;
