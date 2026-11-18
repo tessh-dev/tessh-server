@@ -67,16 +67,20 @@
 
   // ---- Confirm dialog ----
   const confirmDlg = $('dialog[data-dialog=confirm]');
-  function confirmFirst(b) {
-    if (!b.dataset.confirm || !confirmDlg) return Promise.resolve(true);
-    $('[data-c-title]', confirmDlg).textContent = b.dataset.confirm;
-    $('[data-c-text]', confirmDlg).textContent = b.dataset.confirmText || '';
+  function ask(title, text, okLabel, danger) {
+    if (!confirmDlg) return Promise.resolve(true);
+    $('[data-c-title]', confirmDlg).textContent = title;
+    $('[data-c-text]', confirmDlg).textContent = text || '';
     const ok = $('[data-c-ok]', confirmDlg);
-    ok.textContent = b.dataset.confirmOk || 'OK';
-    ok.classList.toggle('danger', b.classList.contains('danger') || b.classList.contains('warn'));
+    ok.textContent = okLabel || 'OK';
+    ok.classList.toggle('danger', !!danger);
     confirmDlg.returnValue = '';
     confirmDlg.showModal();
     return new Promise((resolve) => confirmDlg.addEventListener('close', () => resolve(confirmDlg.returnValue === 'yes'), { once: true }));
+  }
+  function confirmFirst(b) {
+    if (!b.dataset.confirm) return Promise.resolve(true);
+    return ask(b.dataset.confirm, b.dataset.confirmText, b.dataset.confirmOk, b.classList.contains('danger') || b.classList.contains('warn'));
   }
 
   // ---- Action buttons ----
@@ -122,9 +126,21 @@
   }
   $$('input[data-setting]').forEach((input) => {
     let saved = input.value;
+    const isAddress = input.dataset.setting === 'address';
     const save = async () => {
-      if (input.value.trim() === saved.trim()) return;
-      if (await saveSetting(input.dataset.setting, input.value.trim(), input)) {
+      const value = input.value.trim();
+      if (value === saved.trim() || (isAddress && !value)) return;
+      if (isAddress) {
+        // The panel moves to the new address, so ask first.
+        const target = value.replace(/\/+$/, '');
+        if (!(await ask('Change the address?', "You'll open the panel at " + target + ' from now on.', 'Change address'))) {
+          input.value = saved;
+          return;
+        }
+        if (await saveSetting('address', value, input)) location.assign(target + '/admin');
+        return;
+      }
+      if (await saveSetting(input.dataset.setting, value, input)) {
         saved = input.value;
         // The sidebar and the address check follow the new values.
         setTimeout(() => location.reload(), 600);

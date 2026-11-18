@@ -196,14 +196,23 @@ export async function startTotp(env: Env): Promise<{ secret: string; uri: string
   return { secret: b32, uri: totpURI(owner.email, b32) };
 }
 
-export async function confirmTotp(env: Env, code: string): Promise<void> {
+/** With `req`, wrong codes count against that address like wrong passwords do. */
+export async function confirmTotp(env: Env, code: string, req?: Request): Promise<void> {
   const pending = env.OWNER_TOTP_PENDING;
   if (!pending || Date.now() > pending.expiresAt) {
     env.OWNER_TOTP_PENDING = null;
     throw new HttpError("two_step_not_pending", 409, "No authenticator setup in progress, start again");
   }
-  const step = typeof code === "string" ? await matchStep(pending.secret, code.replace(/\s/g, ""), Date.now(), null) : null;
+  const refund = req ? reserve(limitKey(clientIP(req))) : () => {};
+  let step: number | null;
+  try {
+    step = typeof code === "string" ? await matchStep(pending.secret, code.replace(/\s/g, ""), Date.now(), null) : null;
+  } catch (e) {
+    refund();
+    throw e;
+  }
   if (step === null) throw new HttpError("invalid_code", 401, "Invalid code");
+  refund();
   const sealed = await seal(env.TOTP_KEY, "owner", pending.secret);
   const r = await env.DB.prepare("UPDATE owner SET totp_secret = ?, totp_last_step = ?, updated_at = ? WHERE id = 1 AND totp_secret IS NULL")
     .bind(sealed, step, new Date().toISOString())
@@ -330,10 +339,15 @@ export async function signIn(env: Env, req: Request, input: { email: unknown; pa
   }
 }
 
-/** A write from the panel or setup pages: the custom header (which a cross-site form can't send) and, when the browser sends one, an Origin from `origins`. */
+/**
+ * A write from the panel or setup pages: the custom header (which a cross-site form can't send) and, when the browser
+ * sends one, an Origin from `origins` or the request's own origin. Accepting its own origin keeps the owner able to
+ * sign in and fix a mistyped saved address from the address they are really on; either way it is same-origin.
+ */
 export function checkWrite(req: Request, origins: string[]): void {
   const origin = req.headers.get("origin");
-  if (req.headers.get("x-tessh-owner") !== "1" || (origin !== null && !origins.includes(origin))) {
+  const allowed = [...origins, new URL(req.url).origin];
+  if (req.headers.get("x-tessh-owner") !== "1" || (origin !== null && !allowed.includes(origin))) {
     throw new HttpError("forbidden", 403, "Request not allowed");
   }
 }

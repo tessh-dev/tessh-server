@@ -214,8 +214,10 @@ describe("panel API", () => {
     expect(a).toMatchObject({ actor: OWNER, user_id: userId });
     expect(JSON.parse(a.detail)).toMatchObject({ name: "del", email: "del@x.com" });
     expect((await panel("DELETE", `/admin/api/team/${userId}`)).status).toBe(404);
-    const activity = await j(await panel("GET", `/admin/api/activity?user=${userId}`));
-    expect(activity.events[0]).toMatchObject({ kind: "audit", text: "You removed del" });
+    // The person is gone, so only the full log has them.
+    expect((await panel("GET", `/admin/api/activity?user=${userId}`)).status).toBe(404);
+    const activity = await j(await panel("GET", "/admin/api/activity"));
+    expect(activity.events.find((e: any) => e.userId === userId && e.kind === "audit")).toMatchObject({ text: "You removed del" });
   });
 
   it("the owner's own account can't be suspended or removed", async () => {
@@ -313,6 +315,43 @@ describe("panel API", () => {
       for (const s of ["authKey", "salt", "wrapped", "blob", "token_hash", "U0VDUkVUQkxPQg==", "AAAAC3NzaC1lZDI1NTE5", "scrypt$"]) expect(body, `${p} ${s}`).not.toContain(s);
       for (const v of Object.values(u!)) expect(body, p).not.toContain(v);
     }
+  });
+});
+
+describe("fix: address, activity filter, enrolment limits", () => {
+  it("after saving a different address, sign-in and writes from the old origin still work", async () => {
+    try {
+      expect((await panel("POST", "/admin/api/settings", { address: "https://typo.example" })).status).toBe(200);
+      expect(env.PUBLIC_URL).toBe("https://typo.example");
+      const res = await signInOwner();
+      expect(res.status).toBe(200);
+      const fresh = cookieOf(res.headers.get("set-cookie"));
+      expect((await panel("POST", "/admin/api/invites", { label: "Still works", days: 7 }, { cookie: fresh })).status).toBe(200);
+      expect((await panel("POST", "/admin/api/invites", { label: "x", days: 7 }, { headers: { origin: "https://evil.test" } })).status).toBe(403);
+      expect((await panel("POST", "/admin/login", { email: OWNER, password: PW }, { cookie: null, headers: { origin: "null" } })).status).toBe(403);
+    } finally {
+      await panel("POST", "/admin/api/settings", { address: BASE });
+      await env.DB.prepare("DELETE FROM settings WHERE key = 'public_url'").run();
+      env.SETTINGS.publicURL = null;
+    }
+  });
+
+  it("an unknown or malformed person in Activity is a 404", async () => {
+    for (const user of ["nope", uuid()]) {
+      expect((await panel("GET", `/admin/api/activity?user=${user}`)).status, user).toBe(404);
+      expect((await panel("GET", `/admin/activity?user=${user}`)).status, user).toBe(404);
+    }
+  });
+
+  it("the address field shows the request origin only as a placeholder when none is saved", async () => {
+    const html = await (await panel("GET", "/admin/settings")).text();
+    expect(html).toMatch(/<input data-setting="address" value="" placeholder="https:\/\/keys\.test"/);
+  });
+
+  it("the sixth wrong enrolment code is 429", async () => {
+    expect((await panel("POST", "/admin/api/owner/totp/start")).status).toBe(200);
+    for (let i = 0; i < 5; i++) expect((await panel("POST", "/admin/api/owner/totp/confirm", { code: "000000" })).status).toBe(401);
+    expect((await panel("POST", "/admin/api/owner/totp/confirm", { code: "000000" })).status).toBe(429);
   });
 });
 

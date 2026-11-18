@@ -449,10 +449,7 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
   if (m === "GET" || m === "HEAD") {
     if (path === "overview") return json(await overview(env, host));
     if (path === "team") return json({ people: await people(env, host) });
-    if (path === "activity") {
-      const user = url.searchParams.get("user");
-      return json({ events: await activity(env, user && ID_RE.test(user) ? user : null) });
-    }
+    if (path === "activity") return json({ events: await activity(env, await activityUser(env, url)) });
     throw notFound();
   }
   const actor = (await ownerInfo(env))?.email ?? "owner";
@@ -479,13 +476,13 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
     case "settings":
       return saveSettings(env, actor, b);
     case "owner/password":
-      await changeOwnerPassword(env, req, tokenHash, str(b.current), b.next as string);
+      await changeOwnerPassword(env, req, tokenHash, str(b.current), str(b.next));
       await audit(env, actor, "owner_password", null).run();
       return json({ ok: true });
     case "owner/totp/start":
       return json(await startTotp(env));
     case "owner/totp/confirm":
-      await confirmTotp(env, str(b.code));
+      await confirmTotp(env, str(b.code), req);
       await audit(env, actor, "totp_on", null).run();
       return json({ ok: true });
     case "owner/totp/disable":
@@ -501,6 +498,14 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
       return json({ ok: true }, 200, { "set-cookie": await signOut(env, req) });
   }
   throw notFound();
+}
+
+/** The `?user=` an Activity view is for: null for everyone, a 404 for a malformed or unknown id. */
+async function activityUser(env: Env, url: URL): Promise<string | null> {
+  const user = url.searchParams.get("user");
+  if (user === null) return null;
+  if (!ID_RE.test(user) || !(await env.DB.prepare("SELECT 1 FROM users WHERE id = ?").bind(user).first())) throw notFound("Person not found");
+  return user;
 }
 
 async function sidebarCounts(env: Env): Promise<{ people: number; waiting: number }> {
@@ -528,9 +533,9 @@ async function pages(req: Request, env: Env, path: string, url: URL): Promise<st
   }
   if (path === "invites") return renderInvites(ctx, listInvites(env));
   if (path === "activity") {
-    const user = url.searchParams.get("user");
-    const who = user && ID_RE.test(user) ? (await people(env, host, user))[0] ?? null : null;
-    return renderActivity(ctx, await activity(env, who ? who.id : null), who);
+    const user = await activityUser(env, url);
+    const who = user ? (await people(env, host, user))[0] : null;
+    return renderActivity(ctx, await activity(env, user), who);
   }
   if (path === "settings") {
     const now = Date.now();

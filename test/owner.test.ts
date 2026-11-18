@@ -164,6 +164,24 @@ describe("owner login", () => {
     await expect(requireOwner(env, req({ cookie }))).resolves.toBeTruthy();
   });
 
+  it("accepts a write from the request's own origin when the saved address is another one", async () => {
+    const env = await setup({ PUBLIC_URL: "https://typo.example" });
+    const cookie = cookieOf((await signIn(env, req(), { email: EMAIL, password: PW })).cookie);
+    const post = (origin: string) => req({ method: "POST", cookie, headers: { "x-tessh-owner": "1", origin } });
+    await expect(requireOwner(env, post("https://keys.test"))).resolves.toBeTruthy();
+    await expect(requireOwner(env, post("https://typo.example"))).resolves.toBeTruthy();
+    expect((await failure(requireOwner(env, post("https://evil.test")))).status).toBe(403);
+    expect((await failure(requireOwner(env, post("null")))).status).toBe(403);
+  });
+
+  it("limits wrong authenticator codes during enrolment by address", async () => {
+    const env = await setup();
+    await startTotp(env);
+    for (let i = 0; i < 5; i++) expect((await failure(confirmTotp(env, "000000", req()))).status).toBe(401);
+    expect((await failure(confirmTotp(env, "000000", req()))).status).toBe(429);
+    expect((await failure(confirmTotp(env, "000000", req({ ip: "2.2.2.2" })))).status).toBe(401);
+  });
+
   it("refuses a missing, wrong or idle-expired session", async () => {
     const env = await setup();
     expect((await failure(requireOwner(env, req()))).status).toBe(401);

@@ -311,7 +311,7 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
     : `<span class="okt warn"><i></i>Not HTTPS yet</span>`;
   const addr = s.locked.public_url
     ? `<div class="fieldi m">${esc(address)}${https}</div>`
-    : `<div class="fieldi m inp"><input data-setting="address" value="${esc(address)}" autocomplete="off" spellcheck="false" aria-label="Address">${https}</div>`;
+    : `<div class="fieldi m inp"><input data-setting="address" value="${esc(s.publicURL ?? "")}" placeholder="${esc(ctx.origin)}" autocomplete="off" spellcheck="false" aria-label="Address">${https}</div>`;
   const seg = (key: string, label: string, options: [string, string][], current: string, locked: boolean) =>
     `<div class="sg" role="radiogroup" aria-label="${esc(label)}">${options
       .map(

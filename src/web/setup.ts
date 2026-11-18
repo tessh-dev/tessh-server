@@ -354,7 +354,7 @@ export async function setupRoutes(req: Request, env: Env): Promise<Response> {
   if (!mode || !pathname.startsWith("/setup/api/")) throw notFound();
   if (req.method !== "POST") return error("invalid_request", 405, "Method not allowed", undefined, { allow: "POST" });
   // The page may be open on the address the browser used, before the saved public address is reachable.
-  checkWrite(req, [new URL(originFor(req, env)).origin, new URL(req.url).origin]);
+  checkWrite(req, [new URL(originFor(req, env)).origin]);
   switch (pathname) {
     case "/setup/api/code":
       return postCode(req, env);
