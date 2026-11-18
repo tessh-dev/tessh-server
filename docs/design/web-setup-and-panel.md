@@ -105,8 +105,9 @@ and Sign out.
 
 The apps' look, not a generic admin template:
 
-- Tessh tokens, light and dark following the system (canvas, sidebar, card, line, ink, muted, soft, pill,
-  accent, ok; light/dark values as in the apps).
+- Tessh tokens (canvas, sidebar, card, line, ink, muted, soft, pill, accent, ok; values as in the apps).
+  Every page is dark. Only the panel can turn light: Settings > Appearance offers Dark (default), Light or
+  Match system, kept per browser and applied before the first paint. QR tiles stay white so they scan.
 - Headings, page titles and big numbers in Allo Round (bundled woff2, OFL notice shipped with it);
   body in the system sans; addresses, emails and links in mono.
 - The Tessh ASCII field: full-screen behind setup and invite pages with a darkened veil behind the content;

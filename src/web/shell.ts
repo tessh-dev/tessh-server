@@ -30,11 +30,15 @@ export interface PageOptions {
   script?: "setup" | "panel";
 }
 
+/**
+ * Every page is dark. Only the panel (script "panel") loads theme.js, blocking in <head> so its saved
+ * appearance (dark, light or match system) is on <html> before the first paint.
+ */
 export function page({ title, body, script }: PageOptions): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex,nofollow">
-<title>${esc(title)}</title><link rel="stylesheet" href="${assetURL("tessh.css")}"><script src="${assetURL("field.js")}" defer></script>${script ? `<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL(`${script}.js`)}" defer></script>` : ""}
+<meta name="color-scheme" content="dark"><meta name="robots" content="noindex,nofollow">
+<title>${esc(title)}</title>${script === "panel" ? `<script src="${assetURL("theme.js")}"></script>` : ""}<link rel="stylesheet" href="${assetURL("tessh.css")}"><script src="${assetURL("field.js")}" defer></script>${script ? `<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL(`${script}.js`)}" defer></script>` : ""}
 </head><body>
 ${body}
 </body></html>

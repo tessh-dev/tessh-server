@@ -12,6 +12,7 @@ const FILES: Record<string, { file: string; type: string }> = {
   "one-time-code.js": { file: "assets/web/one-time-code.js", type: "text/javascript; charset=utf-8" },
   "setup.js": { file: "assets/web/setup.js", type: "text/javascript; charset=utf-8" },
   "panel.js": { file: "assets/web/panel.js", type: "text/javascript; charset=utf-8" },
+  "theme.js": { file: "assets/web/theme.js", type: "text/javascript; charset=utf-8" },
   "AlloRound.woff2": { file: "assets/fonts/AlloRound.woff2", type: "font/woff2" },
 };
 

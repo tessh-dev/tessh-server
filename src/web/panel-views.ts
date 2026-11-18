@@ -319,11 +319,11 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
   const addr = s.locked.public_url
     ? `<div class="fieldi m">${esc(address)}${https}</div>`
     : `<div class="fieldi m inp"><input data-setting="address" value="${esc(s.publicURL ?? "")}" placeholder="${esc(ctx.origin)}" autocomplete="off" spellcheck="false" aria-label="Address">${https}</div>`;
-  const seg = (key: string, label: string, options: [string, string][], current: string, locked: boolean) =>
+  const seg = (key: string, label: string, options: [string, string][], current: string, locked: boolean, attr = "data-setting") =>
     `<div class="sg" role="radiogroup" aria-label="${esc(label)}">${options
       .map(
         ([v, l]) =>
-          `<button type="button" role="radio" aria-checked="${v === current}"${v === current ? ` class="on"` : ""} data-setting="${key}" data-value="${esc(v)}"${
+          `<button type="button" role="radio" aria-checked="${v === current}"${v === current ? ` class="on"` : ""} ${attr}="${key}" data-value="${esc(v)}"${
             locked ? " disabled" : ""
           }>${esc(l)}</button>`,
       )
@@ -345,6 +345,19 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
     STORAGE.map(([b, l]) => [String(b), l]),
     String(s.defaultBytes),
     false,
+  );
+  // Kept in this browser only (theme.js); the server renders Dark and panel.js marks the saved choice.
+  const appearance = seg(
+    "theme",
+    "Appearance",
+    [
+      ["dark", "Dark"],
+      ["light", "Light"],
+      ["system", "Match system"],
+    ],
+    "dark",
+    false,
+    "data-appearance",
   );
   const sessionRows = sessions
     .map(
@@ -372,6 +385,10 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
     sessions.length > 1 ? action("Sign out other sessions", { method: "POST", path: "/admin/api/owner/sessions/end-others" }) : ""
   }</div></div>
 ${sessionRows}
+</div>
+<div class="h">This browser</div>
+<div class="rows">
+<div class="srow"><div><b>Appearance</b><small>Only the panel, only here</small></div><div>${appearance}</div></div>
 </div>
 <div class="h">Maintenance</div>
 <div class="rows">

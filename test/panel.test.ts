@@ -346,6 +346,16 @@ describe("fix: address, activity filter, enrolment limits", () => {
     }
   });
 
+  it("settings has the per-browser Appearance control, Dark by default", async () => {
+    const html = await (await panel("GET", "/admin/settings")).text();
+    expect(html).toContain(`<script src="${assetURL("theme.js")}"></script>`);
+    expect(html).toContain("<b>Appearance</b>");
+    expect(html).toContain('<div class="sg" role="radiogroup" aria-label="Appearance">');
+    expect(html).toContain('<button type="button" role="radio" aria-checked="true" class="on" data-appearance="theme" data-value="dark">Dark</button>');
+    expect(html).toContain('data-appearance="theme" data-value="light">Light</button>');
+    expect(html).toContain('data-appearance="theme" data-value="system">Match system</button>');
+  });
+
   it("the address field shows the request origin only as a placeholder when none is saved", async () => {
     const html = await (await panel("GET", "/admin/settings")).text();
     expect(html).toMatch(/<input data-setting="address" value="" placeholder="https:\/\/keys\.test"/);

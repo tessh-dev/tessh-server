@@ -160,6 +160,18 @@
     });
   });
 
+  // ---- Appearance: this browser only, applied at once (theme.js keeps it) ----
+  const looks = $$('button[data-appearance]');
+  if (looks.length && window.tesshTheme) {
+    const current = window.tesshTheme.get();
+    const mine = looks.find((b) => b.dataset.value === current);
+    if (mine) choose(mine.closest('.sg'), mine);
+    looks.forEach((b) => b.addEventListener('click', () => {
+      window.tesshTheme.set(b.dataset.value);
+      say('Saved');
+    }));
+  }
+
   // ---- Forms that post to the API ----
   function formBody(form) {
     const body = {};

@@ -1,7 +1,10 @@
 @font-face{font-family:"Allo Round";src:url(/_/AlloRound.woff2) format("woff2");font-weight:100 900;font-display:swap}
-:root{color-scheme:dark light;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace;--display:"Allo Round",var(--sans);
+:root{color-scheme:dark;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace;--display:"Allo Round",var(--sans);
 --canvas:#0f1114;--side:#14161a;--card:#191c21;--line:#262a31;--line2:#1f2329;--ink:#eceef1;--ink2:#c9ced6;--muted:#8c939d;--soft:#5f6670;--pill:#22262c;--accent:#4d8dff;--accent-soft:rgba(77,141,255,.14);--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--shadow:0 1px 2px rgba(0,0,0,.35);--field:#191c21;--tile:#0b0d12}
-@media (prefers-color-scheme:light){:root{--canvas:#f1f3f5;--side:#fafbfc;--card:#ffffff;--line:#e3e6ea;--line2:#eceef1;--ink:#101418;--ink2:#344054;--muted:#667085;--soft:#98a2b3;--pill:#e8ebef;--accent:#2563eb;--accent-soft:rgba(37,99,235,.10);--ok:#16a34a;--warn:#b45309;--bad:#dc2626;--shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04);--field:#ffffff}}
+/* Dark everywhere. Only the panel sets <html data-theme> (theme.js), and only it can turn light. */
+:root[data-theme=light]{color-scheme:light;--canvas:#f1f3f5;--side:#fafbfc;--card:#ffffff;--line:#e3e6ea;--line2:#eceef1;--ink:#101418;--ink2:#344054;--muted:#667085;--soft:#98a2b3;--pill:#e8ebef;--accent:#2563eb;--accent-soft:rgba(37,99,235,.10);--ok:#16a34a;--warn:#b45309;--bad:#dc2626;--shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04);--field:#ffffff}
+:root[data-theme=system]{color-scheme:dark light}
+@media (prefers-color-scheme:light){:root[data-theme=system]{--canvas:#f1f3f5;--side:#fafbfc;--card:#ffffff;--line:#e3e6ea;--line2:#eceef1;--ink:#101418;--ink2:#344054;--muted:#667085;--soft:#98a2b3;--pill:#e8ebef;--accent:#2563eb;--accent-soft:rgba(37,99,235,.10);--ok:#16a34a;--warn:#b45309;--bad:#dc2626;--shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04);--field:#ffffff}}
 *{box-sizing:border-box}
 html{background:var(--canvas)}
 body{margin:0;background:var(--canvas);color:var(--ink);font:400 14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
@@ -209,7 +212,8 @@ input.fieldi{width:100%;outline:0;color:var(--ink)}
 /* one-time code: one real input behind the cells */
 .ui-otp{--o-accent:var(--accent);--o-ink:var(--ink);--o-bg:var(--card);--o-soft:var(--canvas);--o-line:var(--line);--o-muted:var(--muted);--o-ok:var(--ok);--o-bad:var(--bad);--o-depth:rgb(0 0 0 / .2);--o-gap:clamp(4px,1.8vw,8px);--o-split:clamp(6px,2.4vw,12px);--tone:var(--o-accent);
  display:inline-grid;gap:12px;width:100%;max-width:max-content;min-width:0;font:inherit;cursor:text;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
-@media (prefers-color-scheme:light){.ui-otp{--o-depth:rgb(16 24 40 / .06)}}
+:root[data-theme=light] .ui-otp{--o-depth:rgb(16 24 40 / .06)}
+@media (prefers-color-scheme:light){:root[data-theme=system] .ui-otp{--o-depth:rgb(16 24 40 / .06)}}
 .ui-otp[data-state="ok"]{--tone:var(--o-ok)}
 .ui-otp[data-state="bad"]{--tone:var(--o-bad)}
 .ui-otp-cells{position:relative;display:flex;gap:var(--o-gap);min-width:0;perspective:400px}

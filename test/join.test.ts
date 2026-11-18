@@ -51,6 +51,12 @@ describe("invite page", () => {
     }
   });
 
+  it("is always dark: no panel theme", async () => {
+    const html = await (await get(makeEnv(), "/join/abc123")).text();
+    expect(html).toContain('<meta name="color-scheme" content="dark">');
+    expect(html).not.toContain("theme.js");
+  });
+
   it("only answers GET and HEAD, and only once set up", async () => {
     const env = makeEnv();
     expect((await get(env, "/join/abc123", "POST")).status).toBe(405);

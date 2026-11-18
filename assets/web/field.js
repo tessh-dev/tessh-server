@@ -126,13 +126,19 @@
   }
   window.mountAscii = mountAscii;
 
-  // Auto-mount every canvas[data-field]; mount again when the colour scheme changes.
+  // Auto-mount every canvas[data-field]; mount again when the theme changes. Pages are dark unless the panel's
+  // <html data-theme> says "light", or "system" while the system is light.
   const scheme = matchMedia('(prefers-color-scheme: light)');
+  const root = document.documentElement;
+  const isLight = () => root.dataset.theme === 'light' || (root.dataset.theme === 'system' && scheme.matches);
+  let shown = null, ready = false;
   let stops = [];
   function mountAll() {
+    const light = isLight();
+    if (!ready || light === shown) return;
+    shown = light;
     stops.forEach((stop) => stop());
     stops = [];
-    const light = scheme.matches;
     const base = { ramp: light ? 'blueLight' : 'blue', glow: light ? 0.25 : 0.55, ink: light ? 0.7 : 0.85, mouse: true };
     document.querySelectorAll('canvas[data-field]').forEach((cv) => {
       const kind = cv.dataset.field;
@@ -141,7 +147,9 @@
       else if (kind === 'top') stops.push(mountAscii(cv, Object.assign({}, base, { shape: 'horizon', cell: 12 })));
     });
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountAll);
-  else mountAll();
+  const start = () => { ready = true; mountAll(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
   scheme.addEventListener('change', mountAll);
+  new MutationObserver(mountAll).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
 })();
