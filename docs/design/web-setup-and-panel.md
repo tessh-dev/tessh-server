@@ -15,7 +15,7 @@ same sync and key pages as the cloud, plus a panel for the person who runs it.
 
 - Install with two commands and no file editing.
 - First visit opens a guided setup in the browser.
-- A web panel for the owner: overview, team, invites, activity, settings.
+- A web panel for the owner: overview, devices or team and invites, activity, settings, maintenance.
 - Invite people with links. A link opens a small page that hands off to the apps.
 - Each person gets their public key page on this server (`https://<server>/<username>`), shown in the panel.
 - The look matches the Tessh apps (see "Look").
@@ -92,20 +92,39 @@ route (Self-hosted, address, code).
 
 ### 4. Panel (`/admin`)
 
-Sidebar: server name and address, Overview, Team, Invites, Activity, Settings; footer shows "Running · <version>"
-and Sign out.
+Laid out like the Tessh Mac app: a sidebar, then a field strip above a centred column (about 880 px) with a
+big Allo Round title and a subtitle, "Just you · <address>" or "<n> people · <address>".
 
-- **Overview**: people, devices, storage used, version (with "up to date" or "update available"),
-  recent activity.
+**Sidebar.** Header: the server tile (the `t›` glyph on a dark terminal tile), the server name and a green
+dot with "Running · <version>", plus "Update available" in the warn colour when there is one. Footer: the
+owner's initial and email with a Sign out button. The items depend on who the server is for:
+
+- **Just me** (sign-ups `closed`): Overview, Devices, Activity, then a "Server" group with Settings and
+  Maintenance.
+- **Team** (`invite` or `open`): Overview, Team (count of people), Invites (count of waiting invites; the
+  owner's own code is not counted), Activity, then Server: Settings, Maintenance.
+
+Below 760 px the sidebar folds into a top bar with a menu button.
+
+- **Overview**: a health tile (the setup Ready tile, field glowing at the bottom): "✓ <name> is running",
+  then uptime, the last nightly backup and the version with "up to date" or the update available; chips for
+  devices, storage used and HTTPS (or a "Not HTTPS" warning linking to Settings). Then **Your devices**
+  (just me) or a **Team** summary, and the last five events of **Recent activity**. Until the owner has
+  signed up in an app, a **Sign in from your apps** card says what to choose (Self-hosted, the address,
+  your code) and **Show my code** reveals the owner code with Copy.
+- **Devices** (just me): the owner's own devices (OS tile, name, platform, last active, **Sign out**) and
+  their storage used. Before the owner has an account, the same Sign in from your apps card.
 - **Team**: one row per person: name, email, role (Owner / Member), key page link (copy), device count.
   Opening a row shows their devices (OS tile, name, platform, last active, **Sign out**), storage used of
   their limit, and **Storage limit**, **Suspend**, **Remove**.
 - **Invites**: make an invite (a name for the owner's reference, expiry 7 or 30 days); waiting invites with
   copy and cancel; used invites with who joined and when. Each link works once.
-- **Activity**: the audit log.
+- **Activity**: the audit log, with a friendly line while there is nothing yet.
 - **Settings**: name, address, who can join, storage per person; owner login (change password, authenticator,
-  sign out other sessions); backups (download now; nightly copy at 03:00 into the data volume); updates
-  (current version, the update command).
+  sign out other sessions); appearance.
+- **Maintenance**: backups (download now; nightly copy at 03:00 into the data volume, newest 7 kept, with
+  the time of the last one) and updates (current version and whether it is up to date, the update command
+  with Copy).
 
 ## Look
 
@@ -117,8 +136,10 @@ The apps' look, not a generic admin template:
 - Headings, page titles and big numbers in Allo Round (bundled woff2, OFL notice shipped with it);
   body in the system sans; addresses, emails and links in mono.
 - The Tessh ASCII field: full-screen behind setup and invite pages with a darkened veil behind the content;
-  a ~230 px strip fading out at the top of each panel page. Respect reduced motion.
-- Sidebar: monochrome line icons, selected item a neutral pill, counts in the soft colour.
+  a strip above each panel page's content that has faded out before the title, so text never sits on it.
+  Respect reduced motion.
+- Sidebar: monochrome line icons, selected item a neutral pill, counts in the soft colour, group labels small
+  and uppercase.
 - Blue only for the main action, toggles, focus and selection rings. Selection elsewhere is neutral.
 - Device rows use brand OS tiles. Rows and grouped cards like the apps' Settings.
 - The setup "Ready" screen uses the apps' empty-state tile (dark terminal tile, field rising inside).

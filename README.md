@@ -134,13 +134,18 @@ only your recovery code can.
 
 Open `/admin` and sign in with the owner login from setup (and the authenticator code, if you turned it on).
 
-- **Overview**: who is on the server, storage used, and recent activity.
+- **Overview**: whether the server is running, its last backup and version, your devices (or your team)
+  and recent activity. Before you've signed in from an app, it shows your code.
+- **Devices** (just me): your own devices and storage. Sign a device out.
 - **Team**: everyone with an account, their devices and storage. Sign a device out, set a storage limit
   for one person, suspend or remove them.
 - **Invites**: make an invite link, copy it, cancel it. A link works once and can be set to expire.
 - **Activity**: every change made in the panel and every sign-up, newest first.
 - **Settings**: server name, address, who can join, default storage, your owner password and
-  authenticator, your signed-in browsers, backups and the update notice.
+  authenticator, your signed-in browsers and the panel's appearance.
+- **Maintenance**: backups and updates.
+
+On a just-me server, Team and Invites are hidden and Devices takes their place.
 
 | Team | Invites |
 |---|---|
@@ -181,7 +186,7 @@ The server keeps a copy of its database for you: a nightly backup at 03:00 serve
 `/data/backups/`, the newest 7 kept. It is one SQLite file (`tessh-YYYY-MM-DD.db`), made so it is safe
 while the server runs.
 
-To take one now, open **Settings** in the panel and choose **Download a backup**. It asks for the owner
+To take one now, open **Maintenance** in the panel and choose **Download a backup**. It asks for the owner
 password first.
 
 Everything lives in the `/data` volume: `tessh.db`, `secrets.json` and the `backups` folder. **Back up
@@ -207,8 +212,8 @@ docker compose up -d
 ```
 
 Database migrations run automatically at start. Each one runs once, in a transaction, so restarting is
-always safe. Take a backup before upgrading. When a newer release exists, the panel says so under
-**Settings**. Releases are tagged `vX.Y.Z`; pin a tag such as `ghcr.io/bobzth/tessh-server:1.1.0`
+always safe. Take a backup before upgrading. When a newer release exists, the panel says so in the sidebar
+and under **Maintenance**. Releases are tagged `vX.Y.Z`; pin a tag such as `ghcr.io/bobzth/tessh-server:1.1.0`
 instead of `latest` if you prefer to upgrade by hand. To build the image yourself instead, run
 `docker compose up -d --build`.
 
