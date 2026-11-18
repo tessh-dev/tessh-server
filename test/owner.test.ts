@@ -8,6 +8,7 @@ import {
   endOtherSessions,
   hashPassword,
   listOwnerSessions,
+  limitKey,
   requireOwner,
   resetOwnerAttempts,
   signIn,
@@ -147,8 +148,8 @@ describe("owner login", () => {
   it("turns the authenticator off only with the password", async () => {
     const env = await setup();
     await enrol(env);
-    expect((await failure(disableTotp(env, "wrong password here"))).status).toBe(401);
-    await disableTotp(env, PW);
+    expect((await failure(disableTotp(env, req(), "wrong password here"))).status).toBe(401);
+    await disableTotp(env, req(), PW);
     await expect(signIn(env, req(), { email: EMAIL, password: PW })).resolves.toBeTruthy();
   });
 
@@ -221,5 +222,79 @@ describe("owner login", () => {
     const env = makeEnv();
     expect((await failure(createOwner(env, "not-an-email", PW))).status).toBe(400);
     expect((await failure(createOwner(env, EMAIL, "short"))).status).toBe(400);
+  });
+
+  const bad = (env: ReturnType<typeof makeEnv>, ip: string) => signIn(env, req({ ip }), { email: EMAIL, password: "wrong password here" });
+  const settle = async (ps: Promise<unknown>[]) =>
+    (await Promise.allSettled(ps)).map((r) => (r.status === "rejected" && r.reason instanceof HttpError ? r.reason.status : 0));
+
+  it("counts concurrent bad sign-ins before checking them", async () => {
+    const env = await setup();
+    const statuses = await settle(Array.from({ length: 10 }, () => bad(env, "7.7.7.7")));
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(5);
+    expect(statuses.filter((s) => s === 401).length).toBeLessThanOrEqual(5);
+  });
+
+  it("does not count a code_required answer or a success as a failure", async () => {
+    const env = await setup();
+    await enrol(env);
+    for (let i = 0; i < 8; i++) {
+      expect((await failure(signIn(env, req({ ip: "6.6.6.6" }), { email: EMAIL, password: PW }))).code).toBe("code_required");
+    }
+    const env2 = await setup();
+    for (let i = 0; i < 7; i++) await signIn(env2, req({ ip: "6.6.6.6" }), { email: EMAIL, password: PW });
+  });
+
+  it("applies the shared cap only to addresses that already failed, and sets retry-after", async () => {
+    const env = await setup();
+    for (let i = 0; i < 9; i++) await settle(Array.from({ length: 5 }, () => bad(env, `10.0.0.${i}`)));
+    await settle(Array.from({ length: 4 }, () => bad(env, "10.0.1.1")));
+    await settle([bad(env, "10.0.1.2")]);
+    const e = await failure(bad(env, "10.0.1.1"));
+    expect(e.status).toBe(429);
+    const wait = Number(e.headers?.["retry-after"]);
+    expect(wait).toBeGreaterThan(0);
+    expect(wait).toBeLessThanOrEqual(900);
+    await expect(signIn(env, req({ ip: "10.9.9.9" }), { email: EMAIL, password: PW })).resolves.toBeTruthy();
+  });
+
+  it("limits turning the authenticator off by address", async () => {
+    const env = await setup();
+    await enrol(env);
+    for (let i = 0; i < 5; i++) expect((await failure(disableTotp(env, req({ ip: "5.5.5.5" }), "wrong password here"))).status).toBe(401);
+    expect((await failure(disableTotp(env, req({ ip: "5.5.5.5" }), PW))).status).toBe(429);
+  });
+
+  it("shares one bucket per IPv6 /64 and leaves IPv4 alone", async () => {
+    expect(limitKey("2001:db8:1:2:aaaa::1")).toBe(limitKey("2001:db8:1:2:bbbb:cccc:dddd:eeee"));
+    expect(limitKey("2001:db8:1:2::1")).not.toBe(limitKey("2001:db8:1:3::1"));
+    expect(limitKey("1.2.3.4")).toBe("1.2.3.4");
+    expect(limitKey("::ffff:1.2.3.4")).toBe("1.2.3.4");
+    expect(limitKey("::ffff:102:304")).toBe("1.2.3.4");
+    const env = await setup();
+    for (let i = 0; i < 5; i++) await failure(bad(env, `2001:db8:1:2::${i + 1}`));
+    expect((await failure(bad(env, "2001:db8:1:2:ffff::9"))).status).toBe(429);
+  });
+
+  it("refuses a null Origin on a write", async () => {
+    const env = await setup();
+    const cookie = cookieOf((await signIn(env, req(), { email: EMAIL, password: PW })).cookie);
+    expect((await failure(requireOwner(env, req({ method: "POST", cookie, headers: { "x-tessh-owner": "1", origin: "null" } })))).status).toBe(403);
+  });
+
+  it("ends a session after 90 days even if it is in use", async () => {
+    const env = await setup();
+    const cookie = cookieOf((await signIn(env, req(), { email: EMAIL, password: PW })).cookie);
+    await env.DB.prepare("UPDATE owner_sessions SET created_at = ?").bind(new Date(Date.now() - 91 * 86_400_000).toISOString()).run();
+    expect((await failure(requireOwner(env, req({ cookie })))).status).toBe(401);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM owner_sessions").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("rethrows database errors other than a conflict", async () => {
+    const env = makeEnv();
+    await env.DB.prepare("DROP TABLE owner").run();
+    const e = await createOwner(env, EMAIL, PW).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(Error);
+    expect(e).not.toBeInstanceOf(HttpError);
   });
 });

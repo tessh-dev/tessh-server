@@ -9,6 +9,7 @@ import { base32Encode, matchStep, open, seal } from "./totp.ts";
 
 const COOKIE = "tessh_owner";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_MAX_MS = 90 * 24 * 60 * 60 * 1000;
 const TOUCH_MS = 60 * 1000;
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_WRONG = 5;
@@ -65,9 +66,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return bytesEqual(got, want);
 }
 
-let dummy: Promise<string> | null = null;
 /** A valid hash nobody knows the password to, so an unknown email costs the same time as a wrong password. */
-const dummyHash = () => (dummy ??= hashPassword(randomBytes(24).toString("base64")));
+const dummyHash: Promise<string> = hashPassword(randomBytes(24).toString("base64"));
+dummyHash.catch(() => {});
 
 // ---- Failed sign-in limits ----
 
@@ -86,19 +87,50 @@ function prune(now: number): void {
   if (now - global.since > WINDOW_MS) global = { count: 0, since: now };
 }
 
-function assertNotLocked(ip: string, now: number): void {
-  prune(now);
-  const a = attempts.get(ip);
-  if (global.count >= MAX_WRONG_ALL || (a && a.count >= MAX_WRONG)) {
-    const wait = Math.max(1, Math.ceil((WINDOW_MS - (now - (a?.since ?? global.since))) / 1000));
-    throw new HttpError("too_many_attempts", 429, "Too many failed sign-ins. Try again in 15 minutes.", undefined, { "retry-after": String(wait) });
-  }
+/** The bucket for an address: IPv6 by its /64 prefix, IPv4 (and IPv4-mapped IPv6) as is. */
+export function limitKey(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const zone = ip.split("%")[0];
+  const mapped = /^(?:::ffff:|0:0:0:0:0:ffff:)(\d+\.\d+\.\d+\.\d+)$/i.exec(zone);
+  if (mapped) return mapped[1];
+  const [head, tail] = zone.split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const groups = tail === undefined ? h : [...h, ...Array<string>(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
+  if (groups.length !== 8) return ip;
+  const g = groups.map((x) => parseInt(x || "0", 16));
+  if (g.some(Number.isNaN)) return ip;
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`;
+  return g.slice(0, 4).map((x) => x.toString(16)).join(":") + "::/64";
 }
 
-function noteFailure(ip: string, now: number): void {
+const tooMany = (since: number, now: number) =>
+  new HttpError("too_many_attempts", 429, "Too many failed sign-ins. Try again in 15 minutes.", undefined, {
+    "retry-after": String(Math.max(1, Math.ceil((WINDOW_MS - (now - since)) / 1000))),
+  });
+
+/**
+ * Counts an attempt before any await, so concurrent requests can't all slip past the limit. Refunded with `refund`
+ * unless the attempt turns out to be a failure. The shared cap only stops addresses that already have a failure in
+ * the window, so the owner on a clean address is never locked out by others.
+ */
+function reserve(key: string, now = Date.now()): () => void {
+  prune(now);
+  const a = attempts.get(key);
+  if (a && a.count >= MAX_WRONG) throw tooMany(a.since, now);
+  if (a && global.count >= MAX_WRONG_ALL) throw tooMany(global.since, now);
   global.count++;
-  const a = attempts.get(ip);
-  attempts.set(ip, a ? { count: a.count + 1, since: a.since } : { count: 1, since: now });
+  const mine = a ?? { count: 0, since: now };
+  mine.count++;
+  attempts.set(key, mine);
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    if (global.count > 0) global.count--;
+    const cur = attempts.get(key);
+    if (cur === mine && --cur.count <= 0) attempts.delete(key);
+  };
 }
 
 // ---- The owner ----
@@ -138,8 +170,11 @@ export async function createOwner(env: Env, email: string, password: string): Pr
         .bind(e, hash, now, now)
         .run();
     }
-  } catch {
-    throw new HttpError("conflict", 409, "This server already has an owner");
+  } catch (err) {
+    if (!existing && err instanceof Error && /UNIQUE constraint|PRIMARY KEY/i.test(err.message)) {
+      throw new HttpError("conflict", 409, "This server already has an owner");
+    }
+    throw err;
   }
   env.OWNER_TOTP_PENDING = null;
 }
@@ -176,10 +211,19 @@ export async function confirmTotp(env: Env, code: string): Promise<void> {
   if (r.meta.changes !== 1) throw new HttpError("two_step_enabled", 409, "The authenticator is already on");
 }
 
-export async function disableTotp(env: Env, password: string): Promise<void> {
-  const owner = await loadOwner(env);
-  if (!owner) throw unauthorized();
-  if (!(await verifyPassword(password, owner.password_hash))) throw new HttpError("invalid_credentials", 401, "Wrong password");
+export async function disableTotp(env: Env, req: Request, password: string): Promise<void> {
+  const refund = reserve(limitKey(clientIP(req)));
+  let failed = false;
+  try {
+    const owner = await loadOwner(env);
+    if (!owner) throw unauthorized();
+    if (!(await verifyPassword(password, owner.password_hash))) {
+      failed = true;
+      throw new HttpError("invalid_credentials", 401, "Wrong password");
+    }
+  } finally {
+    if (!failed) refund();
+  }
   await env.DB.prepare("UPDATE owner SET totp_secret = NULL, totp_last_step = NULL, updated_at = ? WHERE id = 1").bind(new Date().toISOString()).run();
 }
 
@@ -202,7 +246,10 @@ export async function createOwnerSession(env: Env, req: Request): Promise<string
   const token = randomBytes(32).toString("base64url");
   const now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM owner_sessions WHERE last_seen_at < ?").bind(new Date(Date.now() - SESSION_MS).toISOString()),
+    env.DB.prepare("DELETE FROM owner_sessions WHERE last_seen_at < ? OR created_at < ?").bind(
+      new Date(Date.now() - SESSION_MS).toISOString(),
+      new Date(Date.now() - SESSION_MAX_MS).toISOString(),
+    ),
     env.DB.prepare("INSERT INTO owner_sessions (token_hash, created_at, last_seen_at, ip, agent) VALUES (?, ?, ?, ?, ?)").bind(
       sha256hex(token),
       now,
@@ -215,42 +262,43 @@ export async function createOwnerSession(env: Env, req: Request): Promise<string
 }
 
 export async function signIn(env: Env, req: Request, input: { email: unknown; password: unknown; code?: unknown }): Promise<{ cookie: string }> {
-  const ip = clientIP(req);
   const now = Date.now();
-  assertNotLocked(ip, now);
-
-  let email: string | null = null;
+  const refund = reserve(limitKey(clientIP(req)), now);
+  let failed = false;
+  const fail = (e: HttpError): never => {
+    failed = true;
+    throw e;
+  };
   try {
-    email = normaliseEmail(input.email);
-  } catch {
-    email = null;
-  }
-  const owner = await loadOwner(env);
-  const known = owner !== null && email !== null && email === owner.email;
-  // Always one scrypt run, against a dummy hash when the email isn't the owner's.
-  const passwordOK = await verifyPassword(typeof input.password === "string" ? input.password : "", known ? owner.password_hash : await dummyHash());
-  if (!known || !passwordOK) {
-    noteFailure(ip, now);
-    throw wrongLogin();
-  }
-
-  if (owner.totp_secret) {
-    const code = typeof input.code === "string" ? input.code.replace(/\s/g, "") : "";
-    if (!code) throw new HttpError("code_required", 401, "Enter the code from your authenticator");
-    const secret = await open(env.TOTP_KEY, "owner", owner.totp_secret);
-    const step = await matchStep(secret, code, now, owner.totp_last_step);
-    // The step only moves forward, and the update is conditional, so two requests can't both use one code.
-    const used =
-      step === null
-        ? null
-        : await env.DB.prepare("UPDATE owner SET totp_last_step = ? WHERE id = 1 AND (totp_last_step IS NULL OR totp_last_step < ?)").bind(step, step).run();
-    if (used === null || used.meta.changes !== 1) {
-      noteFailure(ip, now);
-      throw new HttpError("invalid_code", 401, "Invalid code");
+    let email: string | null = null;
+    try {
+      email = normaliseEmail(input.email);
+    } catch {
+      email = null;
     }
+    const owner = await loadOwner(env);
+    const known = owner !== null && email !== null && email === owner.email;
+    // Always one scrypt run, against a dummy hash when the email isn't the owner's.
+    const passwordOK = await verifyPassword(typeof input.password === "string" ? input.password : "", known ? owner.password_hash : await dummyHash);
+    if (!known || !passwordOK) return fail(wrongLogin());
+
+    if (owner.totp_secret) {
+      const code = typeof input.code === "string" ? input.code.replace(/\s/g, "") : "";
+      // Not a failure: the password was right, the page just has to ask for the code.
+      if (!code) throw new HttpError("code_required", 401, "Enter the code from your authenticator");
+      const secret = await open(env.TOTP_KEY, "owner", owner.totp_secret);
+      const step = await matchStep(secret, code, now, owner.totp_last_step);
+      // The step only moves forward, and the update is conditional, so two requests can't both use one code.
+      const used =
+        step === null
+          ? null
+          : await env.DB.prepare("UPDATE owner SET totp_last_step = ? WHERE id = 1 AND (totp_last_step IS NULL OR totp_last_step < ?)").bind(step, step).run();
+      if (used === null || used.meta.changes !== 1) return fail(new HttpError("invalid_code", 401, "Invalid code"));
+    }
+    return { cookie: await createOwnerSession(env, req) };
+  } finally {
+    if (!failed) refund();
   }
-  attempts.delete(ip);
-  return { cookie: await createOwnerSession(env, req) };
 }
 
 /** Throws unless the request carries a live owner session. Writes also need the panel header and a same-origin Origin. */
@@ -258,10 +306,10 @@ export async function requireOwner(env: Env, req: Request): Promise<{ tokenHash:
   const token = tokenOf(req);
   if (!token) throw unauthorized();
   const tokenHash = sha256hex(token);
-  const row = await env.DB.prepare("SELECT last_seen_at FROM owner_sessions WHERE token_hash = ?").bind(tokenHash).first<{ last_seen_at: string }>();
+  const row = await env.DB.prepare("SELECT last_seen_at, created_at FROM owner_sessions WHERE token_hash = ?").bind(tokenHash).first<{ last_seen_at: string; created_at: string }>();
   const now = Date.now();
   const seen = row ? Date.parse(row.last_seen_at) : NaN;
-  if (!row || !(now - seen < SESSION_MS)) {
+  if (!row || !(now - seen < SESSION_MS) || !(now - Date.parse(row.created_at) < SESSION_MAX_MS)) {
     if (row) await env.DB.prepare("DELETE FROM owner_sessions WHERE token_hash = ?").bind(tokenHash).run();
     throw unauthorized();
   }
