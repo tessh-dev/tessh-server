@@ -77,6 +77,9 @@ export function loadSettings(db: Database, processEnv: NodeJS.ProcessEnv): Setti
 
 const invalid = (msg: string) => new HttpError("invalid_request", 400, msg);
 
+/** What a rejected address should look like, in words a person can act on. */
+export const ADDRESS_HINT = "Enter the address as https://your.domain";
+
 /** The value to store for `key`, or a 400 when it is not acceptable. */
 function normalise(key: SettingKey, value: string): string {
   switch (key) {
@@ -88,8 +91,8 @@ function normalise(key: SettingKey, value: string): string {
     case "public_url":
       try {
         return normalisePublicURL(value.trim());
-      } catch (e) {
-        throw invalid(e instanceof Error ? e.message : "Not a valid address");
+      } catch {
+        throw invalid(ADDRESS_HINT);
       }
     case "signups":
       try {

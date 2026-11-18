@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { basic, makeEnv } from "./harness.ts";
+import { makeEnv } from "./harness.ts";
 import { handle, type Env } from "../src/index.ts";
-import { handleAdmin } from "../src/admin.ts";
 import { registerBody } from "./helpers.ts";
 import { cancelInvite, createInvite, listInvites } from "../src/invites.ts";
 import type { Signups } from "../src/config.ts";
@@ -17,16 +16,7 @@ function server(signups: Signups) {
       }),
       env,
     );
-  const admin = (method: string, path: string, body?: unknown) =>
-    handleAdmin(
-      new Request(`https://admin.test${path}`, {
-        method,
-        headers: { authorization: basic(), "x-tessh-admin": "1", "content-type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      }),
-      env,
-    );
-  return { env, register, admin };
+  return { env, register };
 }
 
 const err = async (r: Response) => ((await r.json()) as { error: string }).error;

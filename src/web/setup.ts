@@ -11,7 +11,7 @@ import { checkSetupCode } from "../setup-code.ts";
 import { originFor, saveSetting } from "../settings.ts";
 import { base32Encode, matchStep, timingSafeEqual } from "../totp.ts";
 import { icons } from "./icons.ts";
-import { esc, page } from "./shell.ts";
+import { MARK, esc, page } from "./shell.ts";
 
 const COOKIE = "tessh_setup";
 const SESSION_MS = 2 * 60 * 60 * 1000;
@@ -216,8 +216,6 @@ async function postTeam(req: Request, env: Env): Promise<Response> {
 
 // ---- Pages ----
 
-const MARK = `<div class="mark"><span class="gly" aria-hidden="true"><span class="t">t</span><span class="c">›</span><span class="b"></span></span> Tessh Server</div>`;
-
 function dots(mode: Mode, step: Step): string {
   const order: Step[] = mode === "owner" ? ["code", "owner"] : ["code", "server", "owner", "team"];
   return `<div class="dots" aria-hidden="true">${order.map((s) => (s === step ? `<i class="on"></i>` : "<i></i>")).join("")}</div>`;
@@ -340,6 +338,7 @@ function render(req: Request, env: Env, mode: Mode): string {
     title: mode === "owner" ? "Reset the owner login · Tessh Server" : "Set up · Tessh Server",
     body: `<main class="moment"><canvas data-field="moment" aria-hidden="true"></canvas>${card}</main>`,
     script: "setup",
+    version: env.VERSION,
   });
 }
 

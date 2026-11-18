@@ -8,6 +8,7 @@ describe("web assets", () => {
     ["/_/tessh.css", "text/css"],
     ["/_/field.js", "text/javascript"],
     ["/_/setup.js", "text/javascript"],
+    ["/_/panel.js", "text/javascript"],
     ["/_/AlloRound.woff2", "font/woff2"],
   ];
   for (const [path, type] of cases) {

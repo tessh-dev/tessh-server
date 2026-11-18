@@ -228,6 +228,34 @@ export async function disableTotp(env: Env, req: Request, password: string): Pro
   await env.DB.prepare("UPDATE owner SET totp_secret = NULL, totp_last_step = NULL, updated_at = ? WHERE id = 1").bind(new Date().toISOString()).run();
 }
 
+/** Changes the owner password after checking the current one, and ends every other session. */
+export async function changeOwnerPassword(env: Env, req: Request, keepHash: string, current: string, next: string): Promise<void> {
+  checkPassword(next);
+  const refund = reserve(limitKey(clientIP(req)));
+  let failed = false;
+  try {
+    const owner = await loadOwner(env);
+    if (!owner) throw unauthorized();
+    if (!(await verifyPassword(current, owner.password_hash))) {
+      failed = true;
+      throw new HttpError("invalid_credentials", 401, "Wrong password");
+    }
+  } finally {
+    if (!failed) refund();
+  }
+  const hash = await hashPassword(next);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE owner SET password_hash = ?, updated_at = ? WHERE id = 1").bind(hash, new Date().toISOString()),
+    env.DB.prepare("DELETE FROM owner_sessions WHERE token_hash != ?").bind(keepHash),
+  ]);
+}
+
+/** The owner's email and whether the authenticator is on; null before setup made an owner. */
+export async function ownerInfo(env: Env): Promise<{ email: string; totp: boolean } | null> {
+  const o = await loadOwner(env);
+  return o ? { email: o.email, totp: o.totp_secret !== null } : null;
+}
+
 // ---- Sessions ----
 
 const cookieValue = (token: string, secure: boolean, maxAge: number) =>

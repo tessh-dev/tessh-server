@@ -106,7 +106,7 @@ describe("browser setup", () => {
     expect(first.headers.get("cache-control")).toBe("no-store");
     const codePage = await first.text();
     expect(codePage).toContain("Set up your server");
-    expect(codePage).toContain('<script src="/_/setup.js" defer></script>');
+    expect(codePage).toContain(`<script src="/_/setup.js?v=${env.VERSION}" defer></script>`);
     expect(codePage).not.toMatch(/\sstyle=/);
 
     const unlocked = await unlock(b, code.toLowerCase());

@@ -9,6 +9,7 @@ const FILES: Record<string, { file: string; type: string }> = {
   "tessh.css": { file: "assets/web/tessh.css", type: "text/css; charset=utf-8" },
   "field.js": { file: "assets/web/field.js", type: "text/javascript; charset=utf-8" },
   "setup.js": { file: "assets/web/setup.js", type: "text/javascript; charset=utf-8" },
+  "panel.js": { file: "assets/web/panel.js", type: "text/javascript; charset=utf-8" },
   "AlloRound.woff2": { file: "assets/fonts/AlloRound.woff2", type: "font/woff2" },
 };
 

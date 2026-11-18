@@ -1,6 +1,5 @@
-// The request handler: `/v1/*` is the sync API, `/setup` the browser setup, everything else is the public key pages
-// (`/<username>`, `/<username>/install.sh`, ...). The admin panel is a separate handler (src/admin.ts)
-// served on its own port.
+// The request handler: `/v1/*` is the sync API, `/setup` the browser setup, `/admin` the owner's panel, everything
+// else is the public key pages (`/<username>`, `/<username>/install.sh`, ...).
 import { accountRoutes } from "./accounts.ts";
 import type { Signups } from "./config.ts";
 import type { Database } from "./db.ts";
@@ -9,6 +8,7 @@ import { keysHost } from "./keys-host.ts";
 import { recoveryRoutes } from "./recovery.ts";
 import { syncRoutes } from "./sync.ts";
 import { serveAsset } from "./web/assets.ts";
+import { panelRoutes } from "./web/panel.ts";
 import { setupRoutes } from "./web/setup.ts";
 import { twoStepRoutes } from "./two-step.ts";
 import { HttpError, error, errorFrom, json } from "./http.ts";
@@ -29,8 +29,6 @@ export interface Env {
   SETTINGS: Settings;
   /** Random per boot (16 hex). The setup page uses it to tell a restart from a change of server. */
   INSTANCE_ID: string;
-  /** HTTP Basic password for the admin panel. Unset: the admin panel refuses every request. */
-  ADMIN_PASSWORD?: string | null;
   /** The live setup code (hash only) while the server is not set up. Memory only. */
   SETUP?: { hash: string; expiresAt: number; scope: "full" | "owner" } | null;
   /** The browser that typed the setup code: a hash of its token, bound to that code. Memory only. */
@@ -87,6 +85,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     if (pathname.startsWith("/_/")) return serveAsset(req) ?? error("not_found", 404, "Not found");
     if (pathname === "/v1" || pathname.startsWith("/v1/")) return await api(req, env);
     if (pathname === "/setup" || pathname.startsWith("/setup/")) return await setupRoutes(req, env);
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) return await panelRoutes(req, env);
     return await keysHost(req, env);
   } catch (e) {
     if (e instanceof HttpError) return errorFrom(e);

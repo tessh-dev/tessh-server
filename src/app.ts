@@ -66,7 +66,6 @@ export async function start(processEnv: NodeJS.ProcessEnv = process.env, log: (m
     VERSION: version(),
     SETTINGS: settings,
     INSTANCE_ID: randomBytes(8).toString("hex"),
-    ADMIN_PASSWORD: processEnv.ADMIN_PASSWORD || null,
   };
 
   const api = serve((req) => handle(req, env));
