@@ -330,3 +330,21 @@ describe("browser setup", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 });
+
+describe("an expired owner reset", () => {
+  it("drops the setup session once the code has run out", async () => {
+    const env = makeEnv({ PUBLIC_URL: null });
+    await createOwner(env, "old@example.com", PW);
+    const code = issueSetupCode(env, Date.now(), "owner");
+    const b = new Browser(env);
+    await unlock(b, code);
+    expect((await b.post("/setup/api/owner", { email: "new@example.com", password: "another long password" })).status).toBe(200);
+    // Again, then let the code run out part-way.
+    const code2 = issueSetupCode(env, Date.now(), "owner");
+    const b2 = new Browser(env);
+    await unlock(b2, code2);
+    env.SETUP!.expiresAt = Date.now() - 1;
+    expect((await b2.post("/setup/api/owner", { email: "x@example.com", password: "another long password" })).status).toBe(401);
+    expect(env.SETUP_SESSION).toBeNull();
+  });
+});

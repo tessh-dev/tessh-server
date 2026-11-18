@@ -36,10 +36,10 @@ function prune(now: number): void {
 export const trackedAttempts = (): number => attempts.size;
 
 /** Makes a fresh code, keeps its hash on `env` and returns it as `XXXX-XXXX`. Any earlier code stops working. */
-export function issueSetupCode(env: Env, now = Date.now()): string {
+export function issueSetupCode(env: Env, now = Date.now(), scope: "full" | "owner" = "full"): string {
   let raw = "";
   for (let i = 0; i < CODE_LENGTH; i++) raw += SETUP_ALPHABET[randomInt(SETUP_ALPHABET.length)];
-  env.SETUP = { hash: hashOf(raw), expiresAt: now + LIFETIME_MS, scope: "full" };
+  env.SETUP = { hash: hashOf(raw), expiresAt: now + LIFETIME_MS, scope };
   return `${raw.slice(0, 4)}-${raw.slice(4)}`;
 }
 
@@ -60,9 +60,11 @@ export function checkSetupCode(env: Env, input: string, ip: string, now = Date.n
   throw new HttpError("setup_code_wrong", 401, "That code isn't right.");
 }
 
-export function setupLogLines(code: string): string[] {
+export function setupLogLines(code: string, scope: "full" | "owner" = "full"): string[] {
   return [
-    "Not set up yet. Open this to finish setup (works for 24 hours):",
+    scope === "owner"
+      ? "Owner login reset. Open this to set a new one (works for 24 hours):"
+      : "Not set up yet. Open this to finish setup (works for 24 hours):",
     "  http://<this machine>:8080/setup    or https://your.domain/setup",
     `  Setup code  ${code}`,
   ];

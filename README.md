@@ -119,6 +119,7 @@ All configuration is through environment variables.
 | `PORT` | `8080` | Port for the API and key pages. |
 | `BIND` | `0.0.0.0` | Address the API listens on. |
 | `SIGNUPS` | `invite` | `open`: anyone can create an account. `invite`: only emails on the invite list. `closed`: no new accounts. |
+| `UPDATE_CHECK` | `true` | `false` turns off the daily check for a newer release. |
 | `SERVER_NAME` | `Tessh` | Name shown on the home page and reported to the apps. |
 | `DATA_DIR` | `/data` | Where the database (`tessh.db`) and `secrets.json` live. |
 | `PRELOGIN_SECRET` | (from `secrets.json`) | Optional. Overrides the stored sign-in secret. |

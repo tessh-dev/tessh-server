@@ -8,6 +8,9 @@
   "engines": {
     "node": ">=24"
   },
+  "bin": {
+    "tessh-server": "dist/main.js"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning dist/main.js",
     "dev": "node --disable-warning=ExperimentalWarning src/main.ts",

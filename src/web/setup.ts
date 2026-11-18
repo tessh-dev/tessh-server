@@ -67,7 +67,7 @@ function unlocked(env: Env, req: Request): boolean {
   const s = env.SETUP_SESSION;
   const token = tokenOf(req);
   if (!s || !token) return false;
-  if (!env.SETUP || s.codeHash !== env.SETUP.hash || Date.now() > s.expiresAt) {
+  if (!env.SETUP || Date.now() > env.SETUP.expiresAt || s.codeHash !== env.SETUP.hash || Date.now() > s.expiresAt) {
     env.SETUP_SESSION = null;
     return false;
   }

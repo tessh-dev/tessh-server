@@ -1,7 +1,11 @@
+#!/usr/bin/env node
+import { runCli } from "./cli.ts";
 import { start } from "./app.ts";
 import { ConfigError } from "./config.ts";
 
 try {
+  const code = runCli(process.argv.slice(2));
+  if (code !== null) process.exit(code);
   const app = await start();
   let stopping = false;
   const stop = (signal: string) => {

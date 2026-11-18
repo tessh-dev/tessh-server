@@ -18,7 +18,9 @@ COPY --from=build /app/dist ./dist
 COPY package.json LICENSE ./
 COPY migrations ./migrations
 COPY assets ./assets
-RUN mkdir -p /data && chown node:node /data
+RUN mkdir -p /data && chown node:node /data \
+ && printf '#!/bin/sh\nexec node --disable-warning=ExperimentalWarning /app/dist/main.js "$@"\n' > /usr/local/bin/tessh-server \
+ && chmod +x /usr/local/bin/tessh-server
 USER node
 VOLUME /data
 EXPOSE 8080

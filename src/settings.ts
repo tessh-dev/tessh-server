@@ -5,7 +5,7 @@ import { HttpError } from "./http.ts";
 import type { Env } from "./index.ts";
 import { DEFAULT_LIMITS } from "./limits.ts";
 
-export type SettingKey = "name" | "public_url" | "signups" | "default_bytes" | "owner_user_id" | "setup_done";
+export type SettingKey = "name" | "public_url" | "signups" | "default_bytes" | "owner_user_id" | "setup_done" | "reset_owner_requested";
 
 type LockableKey = "name" | "public_url" | "signups";
 
@@ -17,6 +17,8 @@ export interface Settings {
   defaultBytes: number;
   ownerUserId: string | null;
   setupDone: boolean;
+  /** Set by `tessh-server reset-owner`: the next start issues an owner-reset setup code and clears it. */
+  resetOwnerRequested: boolean;
   /** Settings the server's environment fixes; the panel shows them read-only. */
   locked: Partial<Record<LockableKey, true>>;
 }
@@ -71,6 +73,7 @@ export function loadSettings(db: Database, processEnv: NodeJS.ProcessEnv): Setti
     defaultBytes: stored.has("default_bytes") && Number.isInteger(bytes) ? bytes : DEFAULT_LIMITS.bytes,
     ownerUserId: stored.get("owner_user_id") ?? null,
     setupDone: stored.get("setup_done") === "1",
+    resetOwnerRequested: stored.get("reset_owner_requested") === "1",
     locked,
   };
 }
@@ -106,7 +109,8 @@ function normalise(key: SettingKey, value: string): string {
       return String(n);
     }
     case "setup_done":
-      if (value !== "0" && value !== "1") throw invalid("setup_done must be 0 or 1");
+    case "reset_owner_requested":
+      if (value !== "0" && value !== "1") throw invalid(`${key} must be 0 or 1`);
       return value;
     case "owner_user_id":
       if (!value) throw invalid("owner_user_id is required");
@@ -140,6 +144,9 @@ export function saveSetting(env: Env, key: SettingKey, value: string): void {
       break;
     case "setup_done":
       s.setupDone = v === "1";
+      break;
+    case "reset_owner_requested":
+      s.resetOwnerRequested = v === "1";
       break;
   }
 }

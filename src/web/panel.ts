@@ -4,6 +4,7 @@
 // Zero-knowledge: only names, emails, usernames, device names, counts, sizes and dates leave here. Never vault
 // data, keys, hashes, salts or auth data.
 import { deleteUserStatements } from "../accounts.ts";
+import { backupBytes, dateStamp } from "../backup.ts";
 import { normalisePublicURL, type Signups } from "../config.ts";
 import { HttpError, MAX_BODY_BYTES, errorFrom, json } from "../http.ts";
 import type { Env } from "../index.ts";
@@ -145,12 +146,17 @@ async function people(env: Env, host: string, onlyId?: string): Promise<Person[]
   return list.sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1));
 }
 
+/** The newer version when there is one, null when up to date, undefined when the update check is off. */
+export const updateState = (env: Env): string | null | undefined => (env.UPDATE_CHECK ? (env.UPDATE_LATEST ?? null) : undefined);
+
 export interface Overview {
   people: number;
   devices: number;
   /** capacity: the sum of everyone's limits, or null when anyone has no limit. */
   storage: { bytes: number; capacity: number | null };
   version: string;
+  /** The update check's answer: the newer version, null when up to date, undefined when the check is off. */
+  update: string | null | undefined;
   recent: ActivityEvent[];
 }
 
@@ -165,6 +171,7 @@ async function overview(env: Env, host: string): Promise<Overview> {
       capacity: unlimited || list.length === 0 ? null : list.reduce((n, p) => n + p.limit.bytes, 0),
     },
     version: env.VERSION,
+    update: updateState(env),
     recent: await activity(env, null, 5),
   };
 }
@@ -224,6 +231,8 @@ function auditText(action: string, d: Record<string, unknown>): { text: string; 
       return { text: "You turned on the authenticator", icon: "lock" };
     case "totp_off":
       return { text: "You turned off the authenticator", icon: "lock" };
+    case "backup.download":
+      return { text: "You downloaded a backup", icon: "gear" };
     case "sessions_end_others":
       return { text: "You signed out your other sessions", icon: "lock" };
   }
@@ -383,6 +392,16 @@ async function removeInvite(env: Env, actor: string, code: string): Promise<Resp
   return json({ ok: true });
 }
 
+async function downloadBackup(env: Env, actor: string, head: boolean): Promise<Response> {
+  await audit(env, actor, "backup.download", null).run();
+  return new Response(head ? null : backupBytes(env), {
+    headers: {
+      "content-type": "application/octet-stream",
+      "content-disposition": `attachment; filename="tessh-backup-${dateStamp(new Date())}.db"`,
+    },
+  });
+}
+
 async function saveSettings(env: Env, actor: string, b: Record<string, unknown>): Promise<Response> {
   const fields: [string, SettingKey][] = [
     ["name", "name"],
@@ -450,6 +469,7 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
     if (path === "overview") return json(await overview(env, host));
     if (path === "team") return json({ people: await people(env, host) });
     if (path === "activity") return json({ events: await activity(env, await activityUser(env, url)) });
+    if (path === "backup") return downloadBackup(env, (await ownerInfo(env))?.email ?? "owner", m === "HEAD");
     throw notFound();
   }
   const actor = (await ownerInfo(env))?.email ?? "owner";

@@ -6,7 +6,7 @@ import type { InviteRow } from "../invites.ts";
 import { NO_LIMIT } from "../limits.ts";
 import type { OwnerSessionInfo } from "../owner.ts";
 import { icons } from "./icons.ts";
-import type { ActivityEvent, Overview, Person } from "./panel.ts";
+import { updateState, type ActivityEvent, type Overview, type Person } from "./panel.ts";
 import { MARK, esc, page } from "./shell.ts";
 
 export interface PanelContext {
@@ -154,6 +154,13 @@ const signupsLine = (s: Signups) => (s === "invite" ? "invite only" : s === "ope
 
 // ---- Pages ----
 
+const updateText = (u: string | null | undefined) => (u ? `Update available: ${u}` : "Up to date");
+
+function updateNote(u: string | null | undefined): string {
+  if (u === undefined) return "";
+  return `<span class="${u ? "up" : "ok"}">${esc(updateText(u))}</span>`;
+}
+
 export function renderOverview(ctx: PanelContext, o: Overview): string {
   const pct = o.storage.capacity ? Math.min(100, Math.round((o.storage.bytes / o.storage.capacity) * 100)) : null;
   const bar = pct === null ? "" : `<div class="mt" role="img" aria-label="${pct}% of everyone's storage"><i data-pct="${pct}"></i></div>`;
@@ -162,7 +169,7 @@ export function renderOverview(ctx: PanelContext, o: Overview): string {
 <div class="stat"><small>People</small><b>${o.people}</b></div>
 <div class="stat"><small>Devices</small><b>${o.devices}</b></div>
 <div class="stat"><small>Storage</small><b>${esc(formatBytes(o.storage.bytes))}</b>${bar}</div>
-<div class="stat"><small>Version</small><b>${esc(o.version)}</b></div>
+<div class="stat"><small>Version</small><b>${esc(o.version)}</b>${updateNote(o.update)}</div>
 </div>
 <div class="h">Recent activity<a class="r" href="/admin/activity">All activity</a></div>
 ${eventRows(o.recent, ctx.now, "Nothing has happened yet")}`;
@@ -350,6 +357,7 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
   const totp = owner.totp
     ? `<span class="okt"><i></i>Authenticator on</span><button type="button" class="btn ghost sm" data-open="totp-off">Turn off</button>`
     : `<span class="okt warn"><i></i>Authenticator off</span><button type="button" class="btn ghost sm" data-open="totp-on">Turn on</button>`;
+  const update = updateState(ctx.env);
   const inner = `${header("Settings", "Changes save as you go")}
 <div class="h">Server</div>
 <div class="rows">
@@ -367,7 +375,8 @@ ${sessionRows}
 </div>
 <div class="h">Maintenance</div>
 <div class="rows">
-<div class="srow"><div><b>Updates</b><small>${esc(ctx.env.VERSION)}</small></div><div class="mono muted">docker compose pull &amp;&amp; docker compose up -d</div></div>
+<div class="srow"><div><b>Backups</b><small>One SQLite file</small></div><div class="btns"><a class="btn ghost sm" href="/admin/api/backup" download>Download a backup</a><span class="note">Nightly at 03:00 into the data volume</span></div></div>
+<div class="srow"><div><b>Updates</b><small>${esc(ctx.env.VERSION)}${update === undefined ? "" : ` · ${esc(update ? updateText(update) : "up to date")}`}</small></div><div class="mono muted">docker compose pull &amp;&amp; docker compose up -d</div></div>
 </div>`;
   const pw = (id: string, label: string, auto: string, extra = "") =>
     `<div class="fr"><label for="${id}">${label}</label><input id="${id}" type="password" required autocomplete="${auto}"${extra}></div>`;

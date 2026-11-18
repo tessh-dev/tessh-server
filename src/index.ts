@@ -1,9 +1,10 @@
 // The request handler: `/v1/*` is the sync API, `/setup` the browser setup, `/admin` the owner's panel, everything
-// else is the public key pages (`/<username>`, `/<username>/install.sh`, ...).
+// else is the public key pages (`/<username>`, `/<username>/install.sh`, ...). `/join/<code>` is the invite page.
 import { accountRoutes } from "./accounts.ts";
 import type { Signups } from "./config.ts";
 import type { Database } from "./db.ts";
 import { keypageRoutes } from "./keypage.ts";
+import { joinRoutes } from "./web/join.ts";
 import { keysHost } from "./keys-host.ts";
 import { recoveryRoutes } from "./recovery.ts";
 import { syncRoutes } from "./sync.ts";
@@ -34,6 +35,10 @@ export interface Env {
   /** The browser that typed the setup code: a hash of its token, bound to that code. Memory only. */
   SETUP_SESSION?: { hash: string; codeHash: string; expiresAt: number; totp: { secret: Uint8Array; expiresAt: number } | null } | null;
   /** An authenticator being enrolled for the owner, until confirmed or expired. Memory only. */
+  /** Whether the daily update check runs (UPDATE_CHECK=false turns it off). Unset counts as off. */
+  UPDATE_CHECK?: boolean;
+  /** The newest release the update check has seen, once it is newer than VERSION. Memory only. */
+  UPDATE_LATEST?: string | null;
   OWNER_TOTP_PENDING?: { secret: Uint8Array; expiresAt: number } | null;
 }
 
@@ -86,6 +91,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     if (pathname === "/v1" || pathname.startsWith("/v1/")) return await api(req, env);
     if (pathname === "/setup" || pathname.startsWith("/setup/")) return await setupRoutes(req, env);
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return await panelRoutes(req, env);
+    if (pathname.startsWith("/join/")) return await joinRoutes(req, env);
     return await keysHost(req, env);
   } catch (e) {
     if (e instanceof HttpError) return errorFrom(e);

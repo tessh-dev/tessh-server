@@ -14,6 +14,7 @@ describe("settings", () => {
       defaultBytes: 1073741824,
       ownerUserId: null,
       setupDone: false,
+      resetOwnerRequested: false,
       locked: {},
     });
   });
@@ -32,7 +33,7 @@ describe("settings", () => {
       db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").bind(k, v).execSync();
     }
     expect(loadSettings(db, {})).toEqual({
-      name: "Mine", publicURL: "https://a.example", signups: "closed", defaultBytes: -1, ownerUserId: "u1", setupDone: true, locked: {},
+      name: "Mine", publicURL: "https://a.example", signups: "closed", defaultBytes: -1, ownerUserId: "u1", setupDone: true, resetOwnerRequested: false, locked: {},
     });
   });
 
@@ -117,5 +118,17 @@ describe("settings", () => {
     expect(body).toMatchObject({ setUp: false, name: "Test server" });
     expect(body.instance).toMatch(/^[0-9a-f]{16}$/);
     expect(body.keysURL).toBe("https://keys.test");
+  });
+});
+
+describe("reset_owner_requested", () => {
+  it("accepts 0 and 1 only and updates the live settings", () => {
+    const env = makeEnv();
+    saveSetting(env, "reset_owner_requested", "1");
+    expect(env.SETTINGS.resetOwnerRequested).toBe(true);
+    expect(loadSettings(env.DB, {}).resetOwnerRequested).toBe(true);
+    saveSetting(env, "reset_owner_requested", "0");
+    expect(env.SETTINGS.resetOwnerRequested).toBe(false);
+    expect(() => saveSetting(env, "reset_owner_requested", "yes")).toThrow();
   });
 });

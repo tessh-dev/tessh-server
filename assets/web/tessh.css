@@ -187,3 +187,11 @@ input.fieldi{width:100%;outline:0;color:var(--ink)}
  .ocard h3{font-size:28px}
 }
 @media (prefers-reduced-motion:reduce){.cur{animation:none}}
+.invite{text-align:center}
+.invite .mark{justify-content:center}
+.invite .tile{width:64px;height:64px;border-radius:16px;background:#0b0d12;display:grid;place-items:center;margin:0 auto 18px;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 12px 30px rgba(0,0,0,.3)}
+.invite .tile .gly{font-size:22px}.invite .tile .gly .t{color:#fff}
+.invite .stack{display:grid;gap:8px}
+.invite .cap{margin-top:14px}
+.srow .btns .note{color:var(--muted);font-size:12.5px}
+.stat .up{font-size:12px;color:var(--warn)}

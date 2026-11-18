@@ -1,27 +1,20 @@
 // Wires config, secrets, the database and the HTTP server together. src/main.ts runs it.
-import { readFileSync } from "node:fs";
 import { mkdirSync } from "node:fs";
 import type { Server } from "node:http";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { loadConfig, loadSecrets, type Config } from "./config.ts";
 import { Database } from "./db.ts";
 import { handle, type Env } from "./index.ts";
 import { migrate, readMigrations } from "./migrate.ts";
 import { serve } from "./server.ts";
-import { loadSettings } from "./settings.ts";
+import { loadSettings, saveSetting } from "./settings.ts";
 import { issueSetupCode, setupLogLines } from "./setup-code.ts";
+import { scheduleBackups } from "./backup.ts";
+import { scheduleUpdateChecks } from "./updates.ts";
+import { ROOT, version } from "./version.ts";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-export function version(): string {
-  try {
-    return (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string }).version;
-  } catch {
-    return "0.0.0";
-  }
-}
+export { version };
 
 export interface App {
   config: Config;
@@ -66,6 +59,7 @@ export async function start(processEnv: NodeJS.ProcessEnv = process.env, log: (m
     VERSION: version(),
     SETTINGS: settings,
     INSTANCE_ID: randomBytes(8).toString("hex"),
+    UPDATE_CHECK: processEnv.UPDATE_CHECK?.trim().toLowerCase() !== "false",
   };
 
   const api = serve((req) => handle(req, env));
@@ -73,13 +67,25 @@ export async function start(processEnv: NodeJS.ProcessEnv = process.env, log: (m
   log(
     `Tessh server ${env.VERSION} listening on ${config.bind}:${config.port} (${settings.publicURL ? `public URL ${settings.publicURL}` : "public URL from each request"}, sign-ups: ${settings.signups})`,
   );
-  if (!settings.setupDone) for (const line of setupLogLines(issueSetupCode(env))) log(line);
+  if (!settings.setupDone) {
+    for (const line of setupLogLines(issueSetupCode(env))) log(line);
+    // Setup is not finished, so there is no owner login to reset yet.
+    if (settings.resetOwnerRequested) saveSetting(env, "reset_owner_requested", "0");
+  } else if (settings.resetOwnerRequested) {
+    for (const line of setupLogLines(issueSetupCode(env, Date.now(), "owner"), "owner")) log(line);
+    saveSetting(env, "reset_owner_requested", "0");
+  }
+
+  const stopBackups = scheduleBackups(env, config.dataDir, log);
+  const stopUpdates = env.UPDATE_CHECK ? scheduleUpdateChecks(env) : () => {};
 
   return {
     config,
     env,
     api,
     async close() {
+      stopBackups();
+      stopUpdates();
       await closeServer(api);
       db.close();
     },
