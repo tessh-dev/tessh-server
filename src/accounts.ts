@@ -12,6 +12,7 @@ import {
 } from "./auth.ts";
 import { HttpError, json, readJSON } from "./http.ts";
 import type { Env } from "./index.ts";
+import { consumeInviteStatements, findUsableInvite, invalidInvite } from "./invites.ts";
 import { assertCanSignIn, effectiveLimits } from "./limits.ts";
 import { issueChallenge, isEnabled, requireSecondFactor, twoStepView } from "./two-step.ts";
 
@@ -127,11 +128,21 @@ export function sessionStatements(env: Env, userId: string, deviceId: string, to
   ];
 }
 
-/** SIGNUPS: `open` lets anyone sign up, `invite` needs an invite code, `closed` nobody. */
-async function assertCanSignUp(env: Env): Promise<void> {
-  if (env.SIGNUPS === "open") return;
-  if (env.SIGNUPS === "invite") throw new HttpError("invite_required", 403, "This server needs an invite to create an account. Ask its owner for an invite link.");
-  throw new HttpError("signups_closed", 403, "This server isn't accepting new accounts");
+/**
+ * Who may sign up, and with which code (if any). An owner code always works and makes the owner; otherwise
+ * SIGNUPS decides: `open` lets anyone in (a member code given is still checked and used), `invite` needs a
+ * valid member code, `closed` takes only the owner code.
+ */
+function assertCanSignUp(env: Env, code: string | null): { code: string | null; owner: boolean } {
+  const found = code === null ? null : findUsableInvite(env, code);
+  if (found?.kind === "owner") return { code, owner: true };
+  if (env.SIGNUPS === "closed") throw new HttpError("signups_closed", 403, "This server isn't accepting new accounts");
+  if (code !== null) {
+    if (!found) throw invalidInvite();
+    return { code, owner: false };
+  }
+  if (env.SIGNUPS === "invite") throw new HttpError("invite_required", 403, "This server needs an invite code. Ask the person who runs it.");
+  return { code: null, owner: false };
 }
 
 async function register(req: Request, env: Env): Promise<Response> {
@@ -149,7 +160,8 @@ async function register(req: Request, env: Env): Promise<Response> {
   const wrappedRecovery = b64Field(b.wrappedVaultKeyRecovery, "wrappedVaultKeyRecovery");
   const device = parseDevice(b.device);
 
-  await assertCanSignUp(env);
+  if (b.invite !== undefined && typeof b.invite !== "string") throw invalid("Invalid invite");
+  const signUp = assertCanSignUp(env, typeof b.invite === "string" && b.invite !== "" ? b.invite.trim() : null);
   if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()) {
     throw new HttpError("email_taken", 409, "Email already registered");
   }
@@ -167,12 +179,20 @@ async function register(req: Request, env: Env): Promise<Response> {
         userId, email, await sha256Hex(authKey), salt, JSON.stringify(kdf), wrapped, sealedSigning, b.signerPublicKey,
         await sha256Hex(recoveryKey), wrappedRecovery, now, now,
       ),
+      ...(signUp.code ? consumeInviteStatements(env, signUp.code, userId, now) : []),
+      ...(signUp.owner
+        ? [
+            env.DB.prepare("INSERT INTO settings (key, value) VALUES ('owner_user_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(userId),
+          ]
+        : []),
       ...sessionStatements(env, userId, deviceId, await sha256Hex(token), device, now),
     ]);
   } catch (e) {
+    if (isGuardFailure(e)) throw invalidInvite();
     if (String(e).includes("UNIQUE")) throw new HttpError("email_taken", 409, "Email already registered");
     throw e;
   }
+  if (signUp.owner) env.SETTINGS.ownerUserId = userId;
   return json({ token, deviceId, account: await accountView(env, userId) }, 201);
 }
 
@@ -239,7 +259,7 @@ async function logout(req: Request, env: Env): Promise<Response> {
 
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,30}$/;
 // Key pages share the URL space with the API (/v1/...), so API path names are reserved too.
-const RESERVED = new Set("api www admin keys install help about login signup account settings static assets v1 v2 server health".split(" "));
+const RESERVED = new Set("api www admin keys install help about login signup account settings static assets v1 v2 server health setup join invite docs status _ well-known owner team activity".split(" "));
 
 /** Unauthenticated. Precedence: invalid, then reserved, then taken. */
 async function usernameAvailability(env: Env, raw: string): Promise<Response> {
