@@ -277,3 +277,11 @@ input.fieldi{width:100%;outline:0;color:var(--ink)}
 .where-box code{font:12.5px var(--mono);color:var(--ink2)}
 .cmd{display:flex;align-items:center;gap:10px;margin-top:8px;background:var(--canvas);border:1px solid var(--line2);border-radius:9px;padding:6px 6px 6px 12px}
 .cmd code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap}
+/* Setup "Who's it for?": the team options appear only for a team. */
+[data-who="solo"] .for-team,[data-who="team"] .for-solo{display:none}
+.ocard .note{margin-top:12px;line-height:1.4}
+.team-opts{border-top:1px solid var(--line);margin-top:16px;animation:reveal .32s cubic-bezier(.2,.8,.2,1)}
+.team-opts .lbl:first-child{margin-top:14px}
+.lbl .opt{font-weight:400;opacity:.75}
+@keyframes reveal{from{opacity:0;translate:0 -6px}}
+@media (prefers-reduced-motion:reduce){.team-opts{animation:none}}

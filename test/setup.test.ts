@@ -152,8 +152,16 @@ describe("browser setup", () => {
     expect(row.totp_secret).not.toBeNull();
 
     const team = await b.html();
-    expect(team).toContain("Your team");
-    for (const s of ["Invite only", "Recommended", "Anyone with the address", "Just me", "500 MB", "1 GB", "5 GB", "No limit"]) expect(team).toContain(s);
+    expect(team).toContain("Who's it for?");
+    expect(team).toContain("You can open it up to a team later.");
+    for (const s of ["Just me", "Me and my team", "How people join", "Invite link", "Anyone with the address", "500 MB", "1 GB", "5 GB", "No limit"]) expect(team).toContain(s);
+    // Just me is picked first; the team options sit behind Me and my team.
+    expect(team).toMatch(/<form class="ocard" data-step="team" data-who="solo"/);
+    expect(team).toMatch(/class="ch on" role="radio" aria-checked="true" data-who="solo"/);
+    expect(team).toMatch(/role="radio" aria-checked="false" data-who="team"/);
+    expect(team).toContain('<div class="team-opts for-team" data-team-opts>');
+    expect(team).toMatch(/aria-checked="true" class="on" data-signups="invite"/);
+    expect(team).toMatch(/aria-checked="true" class="on" data-bytes="1073741824"/);
     expect(team).toContain("Holmes Lab is ready");
 
     const done = await b.post("/setup/api/team", { signups: "invite", invites: ["Sam", " Priya "], defaultBytes: 5368709120 });
@@ -184,6 +192,73 @@ describe("browser setup", () => {
     const after = await b.get();
     expect([after.status, after.headers.get("location")]).toEqual([302, "/admin"]);
     expect((await b.post("/setup/api/team", { signups: "invite", invites: [], defaultBytes: -1 })).status).toBe(404);
+  });
+
+  it("finishes for just me: closed, no storage limit, no invites", async () => {
+    const env = unsetEnv();
+    const b = new Browser(env);
+    await throughServer(b, issueSetupCode(env));
+    expect((await b.post("/setup/api/owner", { email: "owner@example.com", password: PW })).status).toBe(200);
+    const page = await b.html();
+    // The Ready card for just me has the owner's code and nothing about invites.
+    const ready = page.slice(page.indexOf("<section class=\"ocard wide\" data-done"), page.indexOf("</section>"));
+    expect(ready).toContain('data-who="solo"');
+    expect(ready).toContain('<p class="sub for-solo">Your vault is ready to sync.</p>');
+    expect(ready).toContain('<div class="lbl for-solo">Connect your apps</div>');
+    expect(ready.replace(/<[^>]*class="[^"]*for-team[^"]*"[^>]*>[^<]*<\/[a-z]+>/g, "")).not.toMatch(/invite/i);
+    expect(ready).toContain("data-owner-code");
+
+    // Members invites make no sense when only the owner can sign up.
+    expect((await b.post("/setup/api/team", { signups: "closed", invites: ["Sam"], defaultBytes: -1 })).status).toBe(400);
+    const done = await b.post("/setup/api/team", { signups: "closed", invites: [], defaultBytes: -1 });
+    expect(done.status).toBe(200);
+    const out = (await done.json()) as { invites: unknown[]; ownerCode: string };
+    expect(out.invites).toEqual([]);
+    expect(out.ownerCode).toMatch(/^[A-Za-z0-9]{6}$/);
+    expect(env.SETTINGS.signups).toBe("closed");
+    expect(env.SETTINGS.defaultBytes).toBe(-1);
+    expect(settingRow(env, "default_bytes")).toBe("-1");
+    const kinds = env.DB.prepare("SELECT kind FROM invites").execSync<{ kind: string }>().results.map((r) => r.kind);
+    expect(kinds).toEqual(["owner"]);
+  });
+
+  it("saves no storage limit for just me whatever size is sent", async () => {
+    const env = unsetEnv();
+    const b = new Browser(env);
+    await throughServer(b, issueSetupCode(env));
+    expect((await b.post("/setup/api/owner", { email: "owner@example.com", password: PW })).status).toBe(200);
+    expect((await b.post("/setup/api/team", { signups: "closed", invites: [], defaultBytes: 12345 })).status).toBe(400);
+    expect((await b.post("/setup/api/team", { signups: "closed" })).status).toBe(200);
+    expect(env.SETTINGS.defaultBytes).toBe(-1);
+  });
+
+  it.each(["invite", "open"] as const)("finishes for a team that joins by %s", async (signups) => {
+    const env = unsetEnv();
+    const b = new Browser(env);
+    await throughServer(b, issueSetupCode(env));
+    expect((await b.post("/setup/api/owner", { email: "owner@example.com", password: PW })).status).toBe(200);
+    const page = await b.html();
+    // The team Ready card keeps the invite links.
+    expect(page).toContain('<p class="sub for-team" data-ready-sub>Send these invite links, then connect your own apps.</p>');
+    expect(page).toContain('<div class="rows for-team" data-invites hidden></div>');
+    const done = await b.post("/setup/api/team", { signups, invites: ["Sam"], defaultBytes: 524288000 });
+    expect(done.status).toBe(200);
+    const out = (await done.json()) as { invites: { label: string; url: string }[] };
+    expect(out.invites.map((i) => i.label)).toEqual(["Sam"]);
+    expect(env.SETTINGS.signups).toBe(signups);
+    expect(env.SETTINGS.defaultBytes).toBe(524288000);
+  });
+
+  it("opens on the team choice when the environment sets signups", async () => {
+    const env = unsetEnv({}, { SIGNUPS: "open" });
+    const b = new Browser(env);
+    await throughServer(b, issueSetupCode(env));
+    expect((await b.post("/setup/api/owner", { email: "owner@example.com", password: PW })).status).toBe(200);
+    const page = await b.html();
+    expect(page).toMatch(/data-step="team" data-who="team"/);
+    expect(page).toMatch(/role="radio" aria-checked="false" data-who="solo" disabled/);
+    expect(page).toMatch(/aria-checked="true" class="on" data-signups="open" disabled/);
+    expect(page).toContain("Set by the server's environment.");
   });
 
   it("can skip the authenticator", async () => {

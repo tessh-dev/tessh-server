@@ -249,9 +249,10 @@ document.querySelectorAll('button[data-copy]').forEach((btn) => {
     });
   }
 
-  // ---- Who can join ----
+  // ---- Who it's for: just me, or me and a team (how they join, first invites, storage) ----
   function team() {
-    const choices = Array.from(form.querySelectorAll('[data-signups]'));
+    const whos = Array.from(form.querySelectorAll('[data-who]'));
+    const joins = Array.from(form.querySelectorAll('[data-signups]'));
     const sizes = Array.from(form.querySelectorAll('[data-bytes]'));
     const tags = form.querySelector('[data-tags]');
     const input = form.querySelector('[data-tag-input]');
@@ -264,7 +265,13 @@ document.querySelectorAll('button[data-copy]').forEach((btn) => {
         x.setAttribute('aria-checked', String(on));
       }
     }
-    choices.forEach((c) => c.addEventListener('click', () => pick(choices, c)));
+    // The team options show only for a team (CSS keys off data-who; the section fades in).
+    whos.forEach((c) => c.addEventListener('click', () => {
+      pick(whos, c);
+      form.dataset.who = c.dataset.who;
+      showError('');
+    }));
+    joins.forEach((j) => j.addEventListener('click', () => pick(joins, j)));
     sizes.forEach((s) => s.addEventListener('click', () => pick(sizes, s)));
 
     function drawTags() {
@@ -313,13 +320,14 @@ document.querySelectorAll('button[data-copy]').forEach((btn) => {
     }
 
     onSubmit(async () => {
-      addName();
+      const solo = form.dataset.who !== 'team';
+      if (!solo) addName();
       const on = (list, key) => (list.find((x) => x.getAttribute('aria-checked') === 'true') || list[0]).dataset[key];
-      const res = await post('/setup/api/team', {
-        signups: on(choices, 'signups'),
-        invites: names,
-        defaultBytes: Number(on(sizes, 'bytes')),
-      });
+      // Just me: closed, no storage limit, no invites.
+      const res = await post('/setup/api/team', solo
+        ? { signups: 'closed', invites: [], defaultBytes: -1 }
+        : { signups: on(joins, 'signups'), invites: names, defaultBytes: Number(on(sizes, 'bytes')) });
+      done.dataset.who = solo ? 'solo' : 'team';
       const list = done.querySelector('[data-invites]');
       res.invites.forEach((inv, i) => {
         const row = rowTemplate.content.firstElementChild.cloneNode(true);

@@ -14,6 +14,7 @@ export const icons = {
   plus: line('<path d="M8 3v10M3 8h10"/>'),
   gear: line('<circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3"/>'),
   grid: line('<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2"/>'),
+  person: line('<circle cx="8" cy="5.5" r="2.5"/><path d="M3.2 13.5c.4-2.6 2.3-4 4.8-4s4.4 1.4 4.8 4"/>'),
   people: line('<circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13c.3-2.3 2-3.5 4.2-3.5s3.9 1.2 4.2 3.5"/><path d="M10.5 3.6a2.3 2.3 0 0 1 0 4.3M12 9.7c1.4.5 2.2 1.6 2.4 3.3"/>'),
   list: line('<path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01"/>'),
   signout: line('<path d="M6.5 2.5h-2a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2M10 5l3 3-3 3M13 8H6"/>'),

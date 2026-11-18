@@ -191,10 +191,13 @@ async function postTeam(req: Request, env: Env): Promise<Response> {
     }
     if (signups !== body.signups) throw invalid("Choose who can join");
   }
-  const bytes = body?.defaultBytes;
+  // Just me (closed): only the owner signs up, so there is no storage limit and nobody to invite.
+  const solo = (locked.signups ? env.SETTINGS.signups : signups) === "closed";
+  const bytes = solo ? (body?.defaultBytes ?? -1) : body?.defaultBytes;
   if (!STORAGE.some(([b]) => b === bytes)) throw invalid("Choose the storage per person");
   const raw = body?.invites ?? [];
   if (!Array.isArray(raw) || raw.length > MAX_INVITES) throw invalid(`Invite up to ${MAX_INVITES} people now; you can add more later`);
+  if (solo && raw.length) throw invalid("Choose Me and my team to invite people");
   const labels = raw.map((l) => (typeof l === "string" ? l.trim() : ""));
   if (labels.some((l) => l.length < 1 || l.length > MAX_LABEL)) throw invalid(`Each name must be 1 to ${MAX_LABEL} characters`);
 
@@ -203,7 +206,7 @@ async function postTeam(req: Request, env: Env): Promise<Response> {
   if (modeOf(env) !== "full") throw notFound();
   if (!ownerExists(env)) throw new HttpError("conflict", 409, "Make the owner login first");
   if (!locked.signups) saveSetting(env, "signups", signups);
-  saveSetting(env, "default_bytes", String(bytes));
+  saveSetting(env, "default_bytes", String(solo ? -1 : bytes));
   const origin = originFor(req, env);
   const invites = labels.map((label) => ({ label, url: createInvite(env, { label, days: 7, kind: "member", origin }).url }));
   const ownerCode = createInvite(env, { label: "Owner", days: null, kind: "owner", origin }).code;
@@ -308,37 +311,54 @@ ${ERR}
 function teamStep(req: Request, env: Env): string {
   const s = env.SETTINGS;
   const locked = !!s.locked.signups;
-  const choice = (value: string, icon: string, title: string, note: string) => {
-    const on = s.signups === value;
-    return `<button type="button" class="ch${on ? " on" : ""}" role="radio" aria-checked="${on}" data-signups="${value}"${locked ? " disabled" : ""}><span class="ic">${icon}</span><span class="what"><b>${title}</b><small>${note}</small></span></button>`;
+  // Just me unless the server's environment already opens it to a team.
+  const who = locked && s.signups !== "closed" ? "team" : "solo";
+  const choice = (value: "solo" | "team", icon: string, title: string, note: string) => {
+    const on = value === who;
+    return `<button type="button" class="ch${on ? " on" : ""}" role="radio" aria-checked="${on}" data-who="${value}"${locked && !on ? " disabled" : ""}><span class="ic">${icon}</span><span class="what"><b>${title}</b><small>${note}</small></span></button>`;
   };
+  const joinNow = locked && s.signups !== "closed" ? s.signups : "invite";
+  const join = (
+    [
+      ["invite", "Invite link"],
+      ["open", "Anyone with the address"],
+    ] as const
+  )
+    .map(([v, label]) => `<button type="button" role="radio" aria-checked="${v === joinNow}"${v === joinNow ? ` class="on"` : ""} data-signups="${v}"${locked ? " disabled" : ""}>${label}</button>`)
+    .join("");
   const current = STORAGE.some(([b]) => b === s.defaultBytes) ? s.defaultBytes : 1_073_741_824;
   const storage = STORAGE.map(
     ([b, label]) => `<button type="button" role="radio" aria-checked="${b === current}"${b === current ? ` class="on"` : ""} data-bytes="${b}">${label}</button>`,
   ).join("");
   const origin = originFor(req, env);
   const host = new URL(origin).host;
-  return `<form class="ocard" data-step="team" novalidate>${MARK}${dots("full", "team")}
-<h3>Your team</h3>
-<p class="sub">All of this can change later.</p>
-<div class="choices" role="radiogroup" aria-label="Who can join">
-${choice("invite", icons.mail, `Invite only<span class="rec">Recommended</span>`, "People join with a link from you.")}
-${choice("open", icons.globe, "Anyone with the address", "Fine on a private network like Tailscale.")}
-${choice("closed", icons.lock, "Just me", "No one else can sign up.")}
+  return `<form class="ocard" data-step="team" data-who="${who}" novalidate>${MARK}${dots("full", "team")}
+<h3>Who's it for?</h3>
+<p class="sub">You can open it up to a team later.</p>
+<div class="choices" role="radiogroup" aria-label="Who it's for">
+${choice("solo", icons.person, "Just me", "Your own vault, on your own server.")}
+${choice("team", icons.people, "Me and my team", "Invite people to sync with this server too.")}
 </div>${locked ? `<p class="cap">Set by the server's environment.</p>` : ""}
-<div class="lbl">Invite people now</div>
+<p class="cap note for-solo">Only you can sign up, with the code on the next screen.</p>
+<div class="team-opts for-team" data-team-opts>
+<div class="lbl" id="join-label">How people join</div>
+<div class="sg" role="radiogroup" aria-labelledby="join-label">${join}</div>
+<div class="lbl">Invite people now <span class="opt">· optional</span></div>
 <div class="fg tagbox"><div class="tags" data-tags><input data-tag-input maxlength="${MAX_LABEL}" placeholder="Add a name" aria-label="Add a name, then press Return"></div></div>
-<div class="lbl">Storage per person</div>
-<div class="sg" role="radiogroup" aria-label="Storage per person">${storage}</div>
+<div class="lbl" id="storage-label">Storage per person</div>
+<div class="sg" role="radiogroup" aria-labelledby="storage-label">${storage}</div>
+</div>
 ${ERR}
 <div class="acts">${back("full")}<button class="btn primary grow" type="submit">Finish setup</button></div>
 </form>
-<section class="ocard wide" data-done hidden>
+<section class="ocard wide" data-done data-who="${who}" hidden>
 <div class="ill"><canvas data-tile aria-hidden="true"></canvas><div class="tx"><span class="g">✓</span> ${esc(s.name)} is running<br><span class="p">~ %</span> <span class="cur"></span></div></div>
 <h3>${esc(s.name)} is ready</h3>
-<p class="sub" data-ready-sub>Send these invite links, then connect your own apps.</p>
-<div class="rows" data-invites hidden></div>
-<div class="lbl">Your own apps</div>
+<p class="sub for-team" data-ready-sub>Send these invite links, then connect your own apps.</p>
+<p class="sub for-solo">Your vault is ready to sync.</p>
+<div class="rows for-team" data-invites hidden></div>
+<div class="lbl for-team">Your own apps</div>
+<div class="lbl for-solo">Connect your apps</div>
 <div class="rows"><div class="row"><span class="ri">${icons.server}</span><div class="t"><b>In Tessh, choose Self-hosted</b><small>${esc(host)} · your code <span data-owner-code></span></small></div></div></div>
 <div class="acts"><a class="btn primary grow" href="/admin">Open the panel</a></div>
 </section>
