@@ -1,6 +1,6 @@
 # Web setup and admin panel
 
-Status: approved design, not built yet. Version target: 1.1.0.
+Status: Built in 1.1.0.
 
 ## Why
 

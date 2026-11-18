@@ -1,6 +1,6 @@
 {
   "name": "tessh-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Self-hostable sync and key page server for the Tessh SSH app",
   "license": "MIT",
   "private": true,

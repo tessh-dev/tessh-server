@@ -4,17 +4,17 @@ services:
     build: .
     container_name: tessh-server
     restart: unless-stopped
-    environment:
-      # Required: the address people and apps use to reach this server (your reverse proxy's HTTPS URL).
-      PUBLIC_URL: https://sync.example.com
-      # open | invite | closed. With invite, make invites under Invites in the panel (/admin).
-      SIGNUPS: invite
-      SERVER_NAME: Tessh
     ports:
-      # Setup, the panel, the API and key pages. Put a reverse proxy with HTTPS in front of this.
-      - "127.0.0.1:8080:8080"
+      # Setup, the panel, the API and key pages. Put a reverse proxy with HTTPS in front for real use.
+      - "8080:8080"
     volumes:
       - tessh-data:/data
+    # Nothing here is required: finish setup in the browser. Setting one of these locks it in the panel.
+    # environment:
+    #   PUBLIC_URL: https://sync.example.com   # the HTTPS address the apps use
+    #   SERVER_NAME: Tessh                     # shown on the home page and in the apps
+    #   SIGNUPS: invite                        # open | invite | closed
+    #   UPDATE_CHECK: "false"                  # stop the daily check for a newer release
 
 volumes:
   tessh-data:
