@@ -12,6 +12,7 @@ import { serveAsset } from "./web/assets.ts";
 import { panelRoutes } from "./web/panel.ts";
 import { setupRoutes } from "./web/setup.ts";
 import { twoStepRoutes } from "./two-step.ts";
+import type { Release } from "./updates.ts";
 import { HttpError, error, errorFrom, json } from "./http.ts";
 import { originFor, type Settings } from "./settings.ts";
 
@@ -39,6 +40,11 @@ export interface Env {
   /** The daily update check: whether it runs (UPDATE_CHECK=false turns it off) and the newer release it found, if any. Memory only. */
   UPDATE_CHECK?: boolean;
   UPDATE_LATEST?: string | null;
+  /** That newer release's page, date and plain-text notes (see updates.ts recordCheck). Memory only. */
+  UPDATE_RELEASE?: Release | null;
+  /** When the last check succeeded, and when the latest attempt failed (null once one succeeds). Epoch ms. */
+  UPDATE_CHECKED_AT?: number | null;
+  UPDATE_FAILED_AT?: number | null;
   /** The data volume, where nightly backups go (the panel reads the newest one's time). Unset in tests. */
   DATA_DIR?: string;
 }

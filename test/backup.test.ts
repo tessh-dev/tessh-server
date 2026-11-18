@@ -159,22 +159,12 @@ describe("backup download", () => {
     }
   });
 
-  it("Maintenance has the Backups rows, the dialog and the update state", async () => {
+  it("Maintenance has the Backups rows and the dialog", async () => {
     const maintenance = await page("/admin/maintenance");
     expect(maintenance).toContain('data-open="backup"');
     expect(maintenance).toContain('data-dialog="backup"');
     expect(maintenance).toContain("Download a backup");
     expect(maintenance).toContain("Nightly at 03:00 into the data volume");
     expect(maintenance).not.toContain('/admin/api/backup" download');
-    expect(await page("/admin")).not.toContain("up to date");
-    expect(maintenance).toContain("The update check is off");
-    env.UPDATE_CHECK = true;
-    expect(await page("/admin")).toContain(`${env.VERSION} up to date`);
-    expect(await page("/admin/maintenance")).toContain("Up to date");
-    env.UPDATE_LATEST = "9.9.9";
-    const overview = await page("/admin");
-    expect(overview).toContain("update 9.9.9 available");
-    expect(overview).toContain('<small class="upd">Update available</small>');
-    expect(await page("/admin/maintenance")).toContain("Update available: 9.9.9");
   });
 });

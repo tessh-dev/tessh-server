@@ -245,7 +245,7 @@ describe("panel layout by mode", () => {
     expect(maintenance).toContain('data-open="backup"');
     expect(maintenance).toContain('data-dialog="backup"');
     expect(maintenance).toContain('<code>docker compose pull &amp;&amp; docker compose up -d</code><button type="button" class="btn ghost sm" data-copy="docker compose pull &amp;&amp; docker compose up -d">');
-    expect(maintenance).toContain(`<div class="mono">${env.VERSION}</div>`);
+    expect(maintenance).toContain(`<div class="mono">${env.VERSION} · The update check is off</div>`);
     const settings = await (await panel("GET", "/admin/settings")).text();
     expect(settings).not.toContain('data-dialog="backup"');
     expect(settings).not.toContain("docker compose pull");

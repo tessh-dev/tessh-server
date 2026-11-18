@@ -20,6 +20,7 @@ export const icons = {
   signout: line('<path d="M6.5 2.5h-2a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2M10 5l3 3-3 3M13 8H6"/>'),
   chevron: line('<path d="m6 3.5 4.5 4.5L6 12.5"/>'),
   laptop: line('<rect x="3" y="3.5" width="10" height="7" rx="1.5"/><path d="M1.5 12.5h13"/>'),
+  upgrade: line('<circle cx="8" cy="8" r="6"/><path d="M8 11V5.5M5.5 8 8 5.5 10.5 8"/>'),
   archive: line('<rect x="2" y="3" width="12" height="3.5" rx="1"/><path d="M3 6.5v5.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V6.5M6.5 9.5h3"/>'),
   menu: line('<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>'),
   close: line('<path d="m4 4 8 8M12 4l-8 8"/>'),

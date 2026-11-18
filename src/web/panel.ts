@@ -27,6 +27,7 @@ import {
   startTotp,
 } from "../owner.ts";
 import { ADDRESS_HINT, originFor, saveSetting, type SettingKey } from "../settings.ts";
+import { updateStatus } from "../updates.ts";
 import {
   formatBytes,
   isApple,
@@ -152,8 +153,11 @@ async function people(env: Env, host: string, onlyId?: string): Promise<Person[]
   return list.sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1));
 }
 
-/** The newer version when there is one, null when up to date, undefined when the update check is off. */
-export const updateState = (env: Env): string | null | undefined => (env.UPDATE_CHECK ? (env.UPDATE_LATEST ?? null) : undefined);
+/** The newer version when there is one, null when none is known, undefined when the update check is off. */
+export const updateState = (env: Env): string | null | undefined => {
+  const s = updateStatus(env);
+  return s.kind === "off" ? undefined : s.kind === "update" ? s.release.version : null;
+};
 
 export interface Overview {
   people: number;

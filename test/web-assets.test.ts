@@ -58,7 +58,7 @@ describe("page shell", () => {
 
   it("has every icon as an svg", () => {
     expect(Object.keys(icons).sort()).toEqual(
-      "apple archive chevron chevronDown close cloud copy globe gear grid info laptop lock list mail menu people person plus server signout".split(" ").sort(),
+      "apple archive chevron chevronDown close cloud copy globe gear grid info laptop lock list mail menu people person plus server signout upgrade".split(" ").sort(),
     );
     for (const svg of Object.values(icons)) expect(svg).toMatch(/^<svg [^>]*viewBox="0 0 16 16"/);
   });

@@ -5,7 +5,8 @@ import type { InviteRow } from "../invites.ts";
 import { NO_LIMIT } from "../limits.ts";
 import type { OwnerSessionInfo } from "../owner.ts";
 import { icons } from "./icons.ts";
-import { updateState, type ActivityEvent, type Overview, type Person } from "./panel.ts";
+import { updateStatus, type Release, type UpdateStatus } from "../updates.ts";
+import type { ActivityEvent, Overview, Person } from "./panel.ts";
 import { MARK, esc, page, totpEnrol } from "./shell.ts";
 
 export interface PanelContext {
@@ -42,6 +43,7 @@ const STORAGE: [number, string][] = [
   [NO_LIMIT, "No limit"],
 ];
 const UPDATE_COMMAND = "docker compose pull && docker compose up -d";
+const UPDATE_WHERE = "Run it where your compose file is. Your data stays in the data volume.";
 const PRIVACY = "The panel never shows anyone's hosts, snippets or keys. It can't: they're encrypted on their devices.";
 
 // ---- Small pieces ----
@@ -176,13 +178,15 @@ function layout(ctx: PanelContext, section: Section, head: { title: string; sub:
         nav("invites", "/admin/invites", icons.mail, "Invites", ctx.counts.waiting),
         nav("activity", "/admin/activity", icons.list, "Activity"),
       ];
-  const update = updateState(ctx.env);
+  const update = updateStatus(ctx.env);
+  const status =
+    update.kind === "update"
+      ? `<a class="upd" href="/admin/maintenance"><i class="dot warn"></i>Update available · ${esc(update.release.version)}</a>`
+      : `<small><i class="dot"></i>Running · ${esc(ctx.env.VERSION)}</small>`;
   const email = ctx.ownerEmail || "Owner";
   const body = `<div class="body app-body">
 <nav class="side" aria-label="Panel" data-side>
-<div class="srv">${TILE}<div class="srv-t"><b>${esc(s.name)}</b><small><i class="dot"></i>Running · ${esc(ctx.env.VERSION)}</small>${
-    update ? `<small class="upd">Update available</small>` : ""
-  }</div><button type="button" class="menu" data-menu aria-expanded="false" aria-controls="panel-nav" aria-label="Menu">${icons.menu}${icons.close}</button></div>
+<div class="srv">${TILE}<div class="srv-t"><b>${esc(s.name)}</b>${status}</div><button type="button" class="menu" data-menu aria-expanded="false" aria-controls="panel-nav" aria-label="Menu">${icons.menu}${icons.close}</button></div>
 <div class="navs" id="panel-nav">
 ${items.join("\n")}
 <div class="grp">Server</div>
@@ -213,7 +217,35 @@ const cap = (label: string, link?: [string, string]) =>
 
 // ---- Pages ----
 
-const updateText = (u: string | null | undefined) => (u ? `Update available: ${u}` : "Up to date");
+/** "12 Nov 2026". */
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** The update notice: the new version, its date, a few plain lines of its notes, the release page and the command. */
+function updateCard(ctx: PanelContext, r: Release): string {
+  const sub = `You're on ${ctx.env.VERSION}${r.publishedAt ? ` · released ${day(r.publishedAt)}` : ""}`;
+  const notes = r.notes.length ? `<ul class="upn">${r.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : "";
+  return `<section class="upcard" aria-labelledby="upd-title"><span class="upi">${icons.upgrade}</span><div class="upt">
+<h2 id="upd-title">Tessh Server ${esc(r.version)} is available</h2>
+<p class="ups">${esc(sub)}</p>
+${notes}<a class="upl" href="${esc(r.url)}" target="_blank" rel="noopener">What's new</a>
+<div class="cmd"><code>${esc(UPDATE_COMMAND)}</code>${copyButton(UPDATE_COMMAND)}</div>
+<p class="cap">${esc(UPDATE_WHERE)}</p>
+</div></section>`;
+}
+
+/** Maintenance's version row when there is no update to show. */
+function versionRow(ctx: PanelContext, u: Exclude<UpdateStatus, { kind: "update" }>): string {
+  const v = esc(ctx.env.VERSION);
+  const [right, note] =
+    u.kind === "current"
+      ? [`${v} · <span class="okp">Up to date</span> · checked ${esc(ago(new Date(u.checkedAt).toISOString(), ctx.now))}`, "Checked against GitHub Releases once a day"]
+      : u.kind === "failed"
+        ? [`${v} · <span class="warnp">Couldn't check for updates</span>`, `Last tried ${esc(ago(new Date(u.at).toISOString(), ctx.now))}. It tries again tomorrow.`]
+        : u.kind === "off"
+          ? [`${v} · The update check is off`, "Remove <code>UPDATE_CHECK=false</code> from the server's environment to turn it back on"]
+          : [`${v} · Not checked yet`, "The first check runs a minute after the server starts"];
+  return `<div class="srow"><div><b>Version</b><small>${note}</small></div><div class="mono">${right}</div></div>`;
+}
 
 /** One device of one person, with Sign out. */
 function deviceRow(ctx: PanelContext, p: Person, d: Person["devices"][number], mine: boolean): string {
@@ -254,12 +286,13 @@ export interface OverviewExtras {
 
 function heroTile(ctx: PanelContext, o: Overview, x: OverviewExtras): string {
   const h = x.health;
+  const u = updateStatus(ctx.env);
   const version =
-    o.update === undefined
-      ? esc(o.version)
-      : o.update
-        ? `${esc(o.version)} · <span class="w">update ${esc(o.update)} available</span>`
-        : `${esc(o.version)} up to date`;
+    u.kind === "update"
+      ? `${esc(o.version)} · <span class="w">update ${esc(u.release.version)} available</span>`
+      : u.kind === "current"
+        ? `${esc(o.version)} up to date`
+        : esc(o.version);
   const backup = h.lastBackup ? `last backup ${esc(backupTime(h.lastBackup, ctx.now))}` : "no backup yet";
   const devices = isSolo(ctx.env) ? (x.owner?.devices.length ?? 0) : o.devices;
   return `<section class="hero" aria-label="Server health"><canvas data-field="tile" aria-hidden="true"></canvas>
@@ -304,7 +337,8 @@ export function renderOverview(ctx: PanelContext, o: Overview, x: OverviewExtras
       : `<div class="row calm"><span class="ri">${icons.people}</span><div class="t"><b>No one has joined yet</b><small>Make an invite and send them the link.</small></div><span class="r"><a class="btn ghost sm" href="/admin/invites">Invites</a></span></div>`;
     middle = `${x.owner ? "" : `${cap("Your own apps")}${connectCard(ctx, x.ownerCode)}`}${cap("Team", ["/admin/team", "All"])}<div class="rows">${rows}</div>`;
   }
-  const inner = `${heroTile(ctx, o, x)}
+  const u = updateStatus(ctx.env);
+  const inner = `${u.kind === "update" ? updateCard(ctx, u.release) : ""}${heroTile(ctx, o, x)}
 ${middle}
 ${cap("Recent activity", ["/admin/activity", "All"])}
 ${eventRows(o.recent, ctx.now)}`;
@@ -549,11 +583,14 @@ ${sessionRows}
 }
 
 export function renderMaintenance(ctx: PanelContext, owner: { totp: boolean }, h: Health): string {
-  const update = updateState(ctx.env);
-  const status =
-    update === undefined
-      ? `<small>The update check is off</small>`
-      : `<small class="${update ? "warnp" : "okp"}">${esc(updateText(update))}</small>`;
+  const u = updateStatus(ctx.env);
+  const updates =
+    u.kind === "update"
+      ? updateCard(ctx, u.release)
+      : `<div class="rows">
+${versionRow(ctx, u)}
+<div class="srow"><div><b>Update</b><small>Run this where your compose file is</small></div><div class="cmd"><code>${esc(UPDATE_COMMAND)}</code>${copyButton(UPDATE_COMMAND)}</div></div>
+</div>`;
   const inner = `<div class="h">Backups</div>
 <div class="rows">
 <div class="srow"><div><b>Download a backup</b><small>One SQLite file with everyone's account data</small></div><div class="btns"><button type="button" class="btn ghost sm" data-open="backup">Download a backup</button></div></div>
@@ -562,10 +599,7 @@ export function renderMaintenance(ctx: PanelContext, owner: { totp: boolean }, h
   }</div></div>
 </div>
 <div class="h">Updates</div>
-<div class="rows">
-<div class="srow"><div><b>Version</b>${status}</div><div class="mono">${esc(ctx.env.VERSION)}</div></div>
-<div class="srow"><div><b>Update</b><small>Run this where your compose file is</small></div><div class="cmd"><code>${esc(UPDATE_COMMAND)}</code>${copyButton(UPDATE_COMMAND)}</div></div>
-</div>
+${updates}
 <p class="cap note">Up ${esc(uptime(h.uptimeMs))}. Your data and settings stay in the data volume across updates.</p>`;
   const dialogs = `
 <dialog class="dlg" data-dialog="backup" aria-labelledby="backup-title"><form method="dialog" data-download="/admin/api/backup" novalidate>

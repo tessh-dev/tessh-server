@@ -106,7 +106,8 @@ owner's initial and email with a Sign out button. The items depend on who the se
 
 Below 760 px the sidebar folds into a top bar with a menu button.
 
-- **Overview**: a health tile (the setup Ready tile, field glowing at the bottom): "✓ <name> is running",
+- **Overview**: when a newer release exists, an **Update available** card sits above everything else (see
+  Updates below). Then a health tile (the setup Ready tile, field glowing at the bottom): "✓ <name> is running",
   then uptime, the last nightly backup and the version with "up to date" or the update available; chips for
   devices, storage used and HTTPS (or a "Not HTTPS" warning linking to Settings). Then **Your devices**
   (just me) or a **Team** summary, and the last five events of **Recent activity**. Until the owner has
@@ -123,8 +124,34 @@ Below 760 px the sidebar folds into a top bar with a menu button.
 - **Settings**: name, address, who can join, storage per person; owner login (change password, authenticator,
   sign out other sessions); appearance.
 - **Maintenance**: backups (download now; nightly copy at 03:00 into the data volume, newest 7 kept, with
-  the time of the last one) and updates (current version and whether it is up to date, the update command
-  with Copy).
+  the time of the last one) and updates (see Updates below).
+
+## Updates
+
+The owner updates the server themselves. The server never pulls images, never touches the Docker socket and
+has no button that updates. It only says when there is something newer and how to get it.
+
+- **The check**: once a day (first a minute after boot) the server asks GitHub for this repo's latest release
+  and keeps, in memory only, its version, release page, publish date and the first five lines of its notes.
+  Versions compare by semver precedence, so an equal or older release is never offered. `UPDATE_CHECK=false`
+  turns the check off; there is no other outbound call.
+- **Release notes are untrusted.** They are reduced to plain lines (headings, bullets, emphasis and quotes
+  stripped, links and images reduced to their text, HTML comments and link definitions dropped) and escaped on
+  the page like any other text. No HTML from GitHub reaches the panel. "What's new" only ever links to this
+  repo's release pages on github.com.
+- **Update available card** (Overview, top; Maintenance, Updates): "Tessh Server <new> is available",
+  "You're on <current> · released <date>", the notes, **What's new** (opens the release page in a new tab),
+  the command `docker compose pull && docker compose up -d` with Copy, and "Run it where your compose file is.
+  Your data stays in the data volume." No card when there's nothing newer.
+- **Sidebar**: the status line under the server name becomes "Update available · <new>" in the warning colour,
+  linking to Maintenance. Otherwise it reads "Running · <version>".
+- **Maintenance, without an update**, says which of these is true, then shows the command anyway:
+  - up to date: "<version> · Up to date · checked <time ago>";
+  - check off: says so, and that removing `UPDATE_CHECK=false` turns it back on;
+  - check failed (offline, GitHub unreachable, the repo private or a 404): "Couldn't check for updates" with
+    the last attempt. A failure never shows an earlier "up to date" as if it were confirmed; a newer release
+    found earlier is still shown;
+  - not checked yet (the first minute after boot): says so.
 
 ## Look
 
