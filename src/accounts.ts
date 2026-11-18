@@ -10,7 +10,7 @@ import {
   sha256Hex,
   timingSafeEqualHex,
 } from "./auth.ts";
-import { HttpError, json, readJSON } from "./http.ts";
+import { HttpError, clientIP, json, limitKey, readJSON } from "./http.ts";
 import type { Env } from "./index.ts";
 import { consumeInviteStatements, findUsableInvite, invalidInvite } from "./invites.ts";
 import { assertCanSignIn, effectiveLimits } from "./limits.ts";
@@ -128,6 +128,46 @@ export function sessionStatements(env: Env, userId: string, deviceId: string, to
   ];
 }
 
+// ---- Wrong invite codes ----
+
+const INVITE_MAX_WRONG = 10;
+const INVITE_MAX_WRONG_ALL = 200;
+const INVITE_MAX_TRACKED = 10_000;
+const inviteFailures = new Map<string, { count: number; since: number }>();
+let inviteGlobal = { count: 0, since: 0 };
+
+/** Forgets every address's wrong invite codes. */
+export function resetInviteAttempts(): void {
+  inviteFailures.clear();
+  inviteGlobal = { count: 0, since: 0 };
+}
+
+const tooManyCodes = (since: number, now: number) =>
+  new HttpError("too_many_attempts", 429, "Too many wrong invite codes. Try again in 15 minutes.", undefined, {
+    "retry-after": String(Math.max(1, Math.ceil((WINDOW_MS - (now - since)) / 1000))),
+  });
+
+/** 429 once an address (IPv6 by /64) has 10 wrong codes in 15 minutes, or every address once there are 200. */
+function checkInviteLimit(key: string, now: number): void {
+  for (const [k, a] of inviteFailures) if (now - a.since > WINDOW_MS) inviteFailures.delete(k);
+  if (now - inviteGlobal.since > WINDOW_MS) inviteGlobal = { count: 0, since: now };
+  const a = inviteFailures.get(key);
+  if (a && a.count >= INVITE_MAX_WRONG) throw tooManyCodes(a.since, now);
+  if (inviteGlobal.count >= INVITE_MAX_WRONG_ALL) throw tooManyCodes(inviteGlobal.since, now);
+}
+
+function countInviteFailure(key: string, now: number): void {
+  inviteGlobal.count++;
+  const a = inviteFailures.get(key);
+  if (a) a.count++;
+  else {
+    while (inviteFailures.size >= INVITE_MAX_TRACKED) inviteFailures.delete(inviteFailures.keys().next().value as string);
+    inviteFailures.set(key, { count: 1, since: now });
+  }
+}
+
+const isCodeFailure = (e: unknown) => e instanceof HttpError && (e.code === "invite_invalid" || e.code === "invite_required");
+
 /**
  * Who may sign up, and with which code (if any). An owner code always works and makes the owner; otherwise
  * SIGNUPS decides: `open` lets anyone in (a member code given is still checked and used), `invite` needs a
@@ -161,7 +201,21 @@ async function register(req: Request, env: Env): Promise<Response> {
   const device = parseDevice(b.device);
 
   if (b.invite !== undefined && typeof b.invite !== "string") throw invalid("Invalid invite");
-  const signUp = assertCanSignUp(env, typeof b.invite === "string" && b.invite !== "" ? b.invite.trim() : null);
+  const code = typeof b.invite === "string" && b.invite !== "" ? b.invite.trim() : null;
+  const ipKey = limitKey(clientIP(req));
+  const started = Date.now();
+  // Only a supplied code can be a wrong guess; without one the answer says nothing about any code.
+  if (code !== null) checkInviteLimit(ipKey, started);
+  const codeFailed = (e: unknown) => {
+    if (code !== null && isCodeFailure(e)) countInviteFailure(ipKey, started);
+  };
+  let signUp: { code: string | null; owner: boolean };
+  try {
+    signUp = assertCanSignUp(env, code);
+  } catch (e) {
+    codeFailed(e);
+    throw e;
+  }
   if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()) {
     throw new HttpError("email_taken", 409, "Email already registered");
   }
@@ -188,7 +242,10 @@ async function register(req: Request, env: Env): Promise<Response> {
       ...sessionStatements(env, userId, deviceId, await sha256Hex(token), device, now),
     ]);
   } catch (e) {
-    if (isGuardFailure(e)) throw invalidInvite();
+    if (isGuardFailure(e)) {
+      codeFailed(invalidInvite());
+      throw invalidInvite();
+    }
     if (String(e).includes("UNIQUE")) throw new HttpError("email_taken", 409, "Email already registered");
     throw e;
   }

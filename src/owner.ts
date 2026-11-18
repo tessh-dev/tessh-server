@@ -2,7 +2,9 @@
 // Only hashes are stored: the password hash, and a SHA-256 of each session token.
 import { createHash, randomBytes, scrypt, timingSafeEqual as bytesEqual } from "node:crypto";
 import { normaliseEmail } from "./accounts.ts";
-import { HttpError, clientIP } from "./http.ts";
+import { HttpError, clientIP, limitKey } from "./http.ts";
+
+export { limitKey };
 import type { Env } from "./index.ts";
 import { originFor } from "./settings.ts";
 import { base32Encode, matchStep, open, seal } from "./totp.ts";
@@ -14,6 +16,8 @@ const TOUCH_MS = 60 * 1000;
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_WRONG = 5;
 const MAX_WRONG_ALL = 50;
+/** Past this many failures across all addresses, every address waits, fresh ones too. */
+const MAX_WRONG_HARD = 200;
 const MAX_TRACKED = 10_000;
 const PENDING_MS = 10 * 60 * 1000;
 const MIN_PASSWORD = 12;
@@ -87,23 +91,6 @@ function prune(now: number): void {
   if (now - global.since > WINDOW_MS) global = { count: 0, since: now };
 }
 
-/** The bucket for an address: IPv6 by its /64 prefix, IPv4 (and IPv4-mapped IPv6) as is. */
-export function limitKey(ip: string): string {
-  if (!ip.includes(":")) return ip;
-  const zone = ip.split("%")[0];
-  const mapped = /^(?:::ffff:|0:0:0:0:0:ffff:)(\d+\.\d+\.\d+\.\d+)$/i.exec(zone);
-  if (mapped) return mapped[1];
-  const [head, tail] = zone.split("::");
-  const h = head ? head.split(":") : [];
-  const t = tail === undefined ? [] : tail ? tail.split(":") : [];
-  const groups = tail === undefined ? h : [...h, ...Array<string>(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
-  if (groups.length !== 8) return ip;
-  const g = groups.map((x) => parseInt(x || "0", 16));
-  if (g.some(Number.isNaN)) return ip;
-  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`;
-  return g.slice(0, 4).map((x) => x.toString(16)).join(":") + "::/64";
-}
-
 const tooMany = (since: number, now: number) =>
   new HttpError("too_many_attempts", 429, "Too many failed sign-ins. Try again in 15 minutes.", undefined, {
     "retry-after": String(Math.max(1, Math.ceil((WINDOW_MS - (now - since)) / 1000))),
@@ -111,14 +98,15 @@ const tooMany = (since: number, now: number) =>
 
 /**
  * Counts an attempt before any await, so concurrent requests can't all slip past the limit. Refunded with `refund`
- * unless the attempt turns out to be a failure. The shared cap only stops addresses that already have a failure in
- * the window, so the owner on a clean address is never locked out by others.
+ * unless the attempt turns out to be a failure. The shared cap of 50 only stops addresses that already have a failure
+ * in the window, so the owner on a clean address isn't locked out by a small attack; past 200 failures everyone waits.
  */
 function reserve(key: string, now = Date.now()): () => void {
   prune(now);
   const a = attempts.get(key);
   if (a && a.count >= MAX_WRONG) throw tooMany(a.since, now);
   if (a && global.count >= MAX_WRONG_ALL) throw tooMany(global.since, now);
+  if (global.count >= MAX_WRONG_HARD) throw tooMany(global.since, now);
   global.count++;
   const mine = a ?? { count: 0, since: now };
   mine.count++;
@@ -303,7 +291,8 @@ export async function ownerInfo(env: Env): Promise<{ email: string; totp: boolea
 
 const cookieValue = (token: string, secure: boolean, maxAge: number) =>
   `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
-const isSecure = (req: Request, env: Env) => originFor(req, env).startsWith("https:");
+/** From the request itself (X-Forwarded-Proto behind a proxy), so a browser on plain http still keeps the cookie. */
+const isSecure = (req: Request) => new URL(req.url).protocol === "https:";
 
 function tokenOf(req: Request): string | null {
   for (const part of (req.headers.get("cookie") ?? "").split(";")) {
@@ -330,7 +319,7 @@ export async function createOwnerSession(env: Env, req: Request): Promise<string
       (req.headers.get("user-agent") ?? "").slice(0, 200),
     ),
   ]);
-  return cookieValue(token, isSecure(req, env), SESSION_MS / 1000);
+  return cookieValue(token, isSecure(req), SESSION_MS / 1000);
 }
 
 export async function signIn(env: Env, req: Request, input: { email: unknown; password: unknown; code?: unknown }): Promise<{ cookie: string }> {
@@ -430,5 +419,5 @@ export async function endOtherSessions(env: Env, keepHash: string): Promise<numb
 export async function signOut(env: Env, req: Request): Promise<string> {
   const token = tokenOf(req);
   if (token) await env.DB.prepare("DELETE FROM owner_sessions WHERE token_hash = ?").bind(sha256hex(token)).run();
-  return cookieValue("", isSecure(req, env), 0);
+  return cookieValue("", isSecure(req), 0);
 }

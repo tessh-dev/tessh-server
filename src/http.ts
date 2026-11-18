@@ -82,3 +82,20 @@ export const CLIENT_IP_HEADER = "x-tessh-client-ip";
 
 /** The address the request really came from, or "unknown" outside the HTTP server. */
 export const clientIP = (req: Request): string => req.headers.get(CLIENT_IP_HEADER) || "unknown";
+
+/** The bucket for an address: IPv6 by its /64 prefix, IPv4 (and IPv4-mapped IPv6) as is. */
+export function limitKey(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const zone = ip.split("%")[0];
+  const mapped = /^(?:::ffff:|0:0:0:0:0:ffff:)(\d+\.\d+\.\d+\.\d+)$/i.exec(zone);
+  if (mapped) return mapped[1];
+  const [head, tail] = zone.split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const groups = tail === undefined ? h : [...h, ...Array<string>(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
+  if (groups.length !== 8) return ip;
+  const g = groups.map((x) => parseInt(x || "0", 16));
+  if (g.some(Number.isNaN)) return ip;
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return `${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`;
+  return g.slice(0, 4).map((x) => x.toString(16)).join(":") + "::/64";
+}

@@ -348,3 +348,26 @@ describe("an expired owner reset", () => {
     expect(env.SETUP_SESSION).toBeNull();
   });
 });
+
+describe("an expired setup code", () => {
+  beforeEach(() => resetSetupAttempts());
+
+  it("sends /setup to the panel once an owner reset code has run out", async () => {
+    const env = makeEnv();
+    await createOwner(env, "old@example.com", PW);
+    issueSetupCode(env, Date.now(), "owner");
+    env.SETUP!.expiresAt = Date.now() - 1;
+    const res = await new Browser(env).get();
+    expect([res.status, res.headers.get("location")]).toEqual([302, "/admin"]);
+  });
+
+  it("tells the owner to restart the server when the first setup code has run out", async () => {
+    const env = unsetEnv({ PUBLIC_URL: null });
+    issueSetupCode(env, Date.now(), "full");
+    env.SETUP!.expiresAt = Date.now() - 1;
+    const html = await new Browser(env).html();
+    expect(html).toContain("This setup code has expired");
+    expect(html).toContain("Restart the server");
+    expect(html).not.toContain('aria-label="Character 1 of 8"');
+  });
+});

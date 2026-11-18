@@ -1,17 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { makeEnv } from "./harness.ts";
 import { handle, type Env } from "../src/index.ts";
+import { resetInviteAttempts } from "../src/accounts.ts";
 import { registerBody } from "./helpers.ts";
 import { cancelInvite, createInvite, listInvites } from "../src/invites.ts";
 import type { Signups } from "../src/config.ts";
 
 function server(signups: Signups) {
   const env = makeEnv({ SIGNUPS: signups });
-  const register = (email: string, invite?: string) =>
+  const register = (email: string, invite?: string, ip = "1.1.1.1") =>
     handle(
       new Request("https://keys.test/v1/register", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-tessh-client-ip": ip },
         body: JSON.stringify(registerBody(email, invite === undefined ? {} : { invite })),
       }),
       env,
@@ -22,6 +23,8 @@ function server(signups: Signups) {
 const err = async (r: Response) => ((await r.json()) as { error: string }).error;
 
 describe("sign-ups", () => {
+  beforeEach(() => resetInviteAttempts());
+
   it("open: anyone can register", async () => {
     const s = server("open");
     expect((await s.register("anyone@example.com")).status).toBe(201);
@@ -187,5 +190,33 @@ describe("sign-ups", () => {
       const r = await handle(new Request("https://keys.test/v1/server"), s.env);
       expect(((await r.json()) as Env & { signups: string }).signups).toBe(mode);
     }
+  });
+  it("limits wrong invite codes to 10 per address in 15 minutes", async () => {
+    const s = server("invite");
+    seed(s, "good", "member");
+    for (let i = 0; i < 10; i++) expect(await err(await s.register(`x${i}@example.com`, `bad${i}`, "4.4.4.4"))).toBe("invite_invalid");
+    const r = await s.register("y@example.com", "good", "4.4.4.4");
+    expect(r.status).toBe(429);
+    expect(await err(r)).toBe("too_many_attempts");
+    // The same /64 shares the bucket; other addresses still get in.
+    for (let i = 0; i < 10; i++) await s.register(`v${i}@example.com`, `bad${i}`, `2001:db8:1:2::${i + 1}`);
+    expect((await s.register("w@example.com", "good", "2001:db8:1:2:ffff::9")).status).toBe(429);
+    expect((await s.register("z@example.com", "good", "5.5.5.5")).status).toBe(201);
+  });
+
+  it("does not count sign-ups without a code, or right codes, as failures", async () => {
+    const s = server("invite");
+    for (let i = 0; i < 12; i++) expect(await err(await s.register(`n${i}@example.com`, undefined, "4.4.4.4"))).toBe("invite_required");
+    seed(s, "good", "member");
+    expect((await s.register("ok@example.com", "good", "4.4.4.4")).status).toBe(201);
+  });
+
+  it("stops every address after 200 wrong invite codes", async () => {
+    const s = server("invite");
+    seed(s, "good", "member");
+    for (let a = 0; a < 20; a++) for (let i = 0; i < 10; i++) await s.register(`x${a}-${i}@example.com`, "nope00", `6.6.${a}.1`);
+    const r = await s.register("fresh@example.com", "good", "7.7.7.7");
+    expect(r.status).toBe(429);
+    expect(await err(r)).toBe("too_many_attempts");
   });
 });

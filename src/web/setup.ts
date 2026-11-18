@@ -43,7 +43,9 @@ const sha256hex = (s: string) => createHash("sha256").update(s).digest("hex");
 const invalid = (msg: string) => new HttpError("invalid_request", 400, msg);
 const notFound = () => new HttpError("not_found", 404, "Not found");
 
-/** Full setup until it is done; owner-only while an owner-reset code is live; otherwise there is nothing to set up. */
+const codeExpired = (env: Env) => !!env.SETUP && Date.now() > env.SETUP.expiresAt;
+
+/** Full setup until it is done; owner-only while an owner-reset code is there; otherwise there is nothing to set up. */
 function modeOf(env: Env): Mode | null {
   if (env.SETUP?.scope === "owner") return "owner";
   return env.SETTINGS.setupDone ? null : "full";
@@ -224,7 +226,16 @@ function dots(mode: Mode, step: Step): string {
 const ERR = `<p class="err" role="alert" hidden></p>`;
 const back = (mode: Mode) => (mode === "full" ? `<a class="btn ghost" href="/setup?step=server">Back</a>` : "");
 
-function codeStep(mode: Mode): string {
+function expiredStep(mode: Mode): string {
+  return `<div class="ocard" data-step="expired">${MARK}${dots(mode, "code")}
+<h3>This setup code has expired</h3>
+<p class="sub">Restart the server for a new one, then find it in the logs under “Not set up yet”.</p>
+<p class="cap">Run <span class="mono">docker compose restart tessh-server</span>, then <span class="mono">docker compose logs tessh-server</span>.</p>
+</div>`;
+}
+
+function codeStep(mode: Mode, env: Env): string {
+  if (codeExpired(env)) return expiredStep(mode);
   const box = (i: number) =>
     `<input aria-label="Character ${i + 1} of 8" maxlength="1" autocomplete="off" autocapitalize="characters" spellcheck="false"${i === 0 ? " autofocus" : ""}>`;
   const boxes = [0, 1, 2, 3].map(box).join("") + `<span class="dash" aria-hidden="true">–</span>` + [4, 5, 6, 7].map(box).join("");
@@ -333,7 +344,7 @@ function render(req: Request, env: Env, mode: Mode): string {
   // Back from the owner or team step shows the server step again.
   if (mode === "full" && step !== "code" && step !== "server" && new URL(req.url).searchParams.get("step") === "server") step = "server";
   const card =
-    step === "code" ? codeStep(mode) : step === "server" ? serverStep(req, env, mode) : step === "owner" ? ownerStep(env, mode) : teamStep(req, env);
+    step === "code" ? codeStep(mode, env) : step === "server" ? serverStep(req, env, mode) : step === "owner" ? ownerStep(env, mode) : teamStep(req, env);
   return page({
     title: mode === "owner" ? "Reset the owner login · Tessh Server" : "Set up · Tessh Server",
     body: `<main class="moment"><canvas data-field="moment" aria-hidden="true"></canvas>${card}</main>`,
@@ -348,7 +359,9 @@ export async function setupRoutes(req: Request, env: Env): Promise<Response> {
   const mode = modeOf(env);
   if (pathname === "/setup") {
     if (req.method !== "GET" && req.method !== "HEAD") return error("invalid_request", 405, "Method not allowed", undefined, { allow: "GET, HEAD" });
-    if (!mode) return new Response(null, { status: 302, headers: { location: "/admin", "cache-control": "no-store" } });
+    // A run-out owner reset has nothing left to show; the panel still works with the old login.
+    const resetRanOut = mode === "owner" && env.SETTINGS.setupDone && codeExpired(env);
+    if (!mode || resetRanOut) return new Response(null, { status: 302, headers: { location: "/admin", "cache-control": "no-store" } });
     return new Response(req.method === "HEAD" ? null : render(req, env, mode), { headers: HTML_HEADERS });
   }
   if (!mode || !pathname.startsWith("/setup/api/")) throw notFound();

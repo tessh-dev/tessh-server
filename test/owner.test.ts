@@ -82,8 +82,18 @@ describe("owner login", () => {
 
   it("omits Secure on a plain http origin", async () => {
     const env = await setup({ PUBLIC_URL: "http://keys.test" });
-    const { cookie } = await signIn(env, req(), { email: EMAIL, password: PW });
+    const { cookie } = await signIn(env, req({ url: "http://keys.test/admin/api/login" }), { email: EMAIL, password: PW });
     expect(cookie).not.toContain("Secure");
+  });
+
+  it("follows the request's protocol for Secure, not the saved address", async () => {
+    const env = await setup({ PUBLIC_URL: "https://keys.test" });
+    const plain = await signIn(env, req({ url: "http://10.0.0.5:8080/admin/api/login" }), { email: EMAIL, password: PW });
+    expect(plain.cookie).not.toContain("Secure");
+    expect(await signOut(env, req({ url: "http://10.0.0.5:8080/admin/api/logout" }))).not.toContain("Secure");
+    const env2 = await setup({ PUBLIC_URL: "http://keys.test" });
+    const tls = await signIn(env2, req({ url: "https://keys.test/admin/api/login" }), { email: EMAIL, password: PW });
+    expect(tls.cookie).toContain("Secure");
   });
 
   it("gives the same answer for an unknown email and a wrong password", async () => {
@@ -275,6 +285,15 @@ describe("owner login", () => {
     expect(wait).toBeLessThanOrEqual(900);
     await expect(signIn(env, req({ ip: "10.9.9.9" }), { email: EMAIL, password: PW })).resolves.toBeTruthy();
   });
+
+  it("stops everyone, fresh addresses too, after 200 failures in the window", async () => {
+    const env = await setup();
+    // 200 failures, each from a fresh address, so neither the per-address nor the 50 cap applies.
+    for (let i = 0; i < 25; i++) await settle(Array.from({ length: 8 }, (_, j) => bad(env, `10.1.${i}.${j + 1}`)));
+    const e = await failure(signIn(env, req({ ip: "10.2.0.1" }), { email: EMAIL, password: PW }));
+    expect(e.status).toBe(429);
+    expect(Number(e.headers?.["retry-after"])).toBeGreaterThan(0);
+  }, 60_000);
 
   it("limits turning the authenticator off by address", async () => {
     const env = await setup();

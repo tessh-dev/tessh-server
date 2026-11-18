@@ -66,7 +66,9 @@ Setup needs nothing in the compose file: no password, no address, no environment
 
 The apps need HTTPS, so put a reverse proxy in front of port 8080. The server reads `X-Forwarded-Proto`
 and `X-Forwarded-Host`, which both examples below send. Once the proxy is up, open
-`https://sync.example.com/setup` and use that as the address in setup.
+`https://sync.example.com/setup` and use that as the address in setup. Do setup there rather than on
+plain port 8080 once the proxy is running: the setup code and your owner password travel over that
+connection.
 
 If the proxy runs on the same machine, change the compose port to `"127.0.0.1:8080:8080"` so the server is
 only reachable through it.
@@ -135,7 +137,7 @@ Open `/admin` and sign in with the owner login from setup (and the authenticator
 - **Overview**: who is on the server, storage used, and recent activity.
 - **Team**: everyone with an account, their devices and storage. Sign a device out, set a storage limit
   for one person, suspend or remove them.
-- **Invites**: make an invite link, copy it, cancel it. A link works once and expires.
+- **Invites**: make an invite link, copy it, cancel it. A link works once and can be set to expire.
 - **Activity**: every change made in the panel and every sign-up, newest first.
 - **Settings**: server name, address, who can join, default storage, your owner password and
   authenticator, your signed-in browsers, backups and the update notice.
@@ -263,7 +265,13 @@ mode `0600`.
 - **Protect the owner login.** Use a long password and turn on the authenticator code. Panel writes are
   refused from other sites, and downloading a backup needs the owner password again.
 - **Rate limits.** Password and two-step attempts are limited per account (10 per 15 minutes), recovery
-  code attempts more tightly (5 per hour). Consider rate limiting at your proxy as well.
+  code attempts more tightly (5 per hour). Owner sign-ins allow 5 failures per address in 15 minutes, and
+  after 200 failures from all addresses together everyone waits out the 15 minutes. Wrong invite codes allow
+  10 per address and 200 in all per 15 minutes. Consider rate limiting at your proxy as well.
+- **Client addresses.** The server trusts `X-Forwarded-For` only when the connection comes from a loopback
+  or private address (a reverse proxy on the same machine or network). Anything else is limited by the
+  address it connects from, so don't expose a private-network proxy that passes through headers from
+  untrusted clients.
 - **Logs** never contain request bodies, tokens or keys.
 - **`secrets.json`** is created with mode `0600`. Keep backups of it as private as the database.
 - **No tracking, one outbound call.** The only request the server makes is the daily update check
