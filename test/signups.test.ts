@@ -219,4 +219,13 @@ describe("sign-ups", () => {
     expect(r.status).toBe(429);
     expect(await err(r)).toBe("too_many_attempts");
   });
+  it("limits wrong codes on a closed server too, and the owner code still works elsewhere", async () => {
+    const s = server("closed");
+    seed(s, "owner", "owner");
+    for (let i = 0; i < 10; i++) expect(await err(await s.register(`c${i}@example.com`, `bad${i}`, "8.8.8.8"))).toBe("signups_closed");
+    const r = await s.register("c10@example.com", "bad10", "8.8.8.8");
+    expect(r.status).toBe(429);
+    expect(await err(r)).toBe("too_many_attempts");
+    expect((await s.register("me@example.com", "owner", "9.9.9.9")).status).toBe(201);
+  });
 });

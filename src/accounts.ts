@@ -166,7 +166,9 @@ function countInviteFailure(key: string, now: number): void {
   }
 }
 
-const isCodeFailure = (e: unknown) => e instanceof HttpError && (e.code === "invite_invalid" || e.code === "invite_required");
+/** A supplied code that didn't work. On a closed server a wrong code answers `signups_closed`, so that counts too. */
+const isCodeFailure = (e: unknown) =>
+  e instanceof HttpError && (e.code === "invite_invalid" || e.code === "invite_required" || e.code === "signups_closed");
 
 /**
  * Who may sign up, and with which code (if any). An owner code always works and makes the owner; otherwise
