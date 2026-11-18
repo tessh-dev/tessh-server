@@ -7,6 +7,7 @@ import { HttpError, clientIP, limitKey } from "./http.ts";
 export { limitKey };
 import type { Env } from "./index.ts";
 import { originFor } from "./settings.ts";
+import { qrSVG } from "./qr.ts";
 import { base32Encode, matchStep, open, seal } from "./totp.ts";
 
 const COOKIE = "tessh_owner";
@@ -174,14 +175,15 @@ export const totpURI = (account: string, secretB32: string): string =>
   `otpauth://totp/Tessh%20Server:${encodeURIComponent(account)}?secret=${secretB32}&issuer=Tessh%20Server`;
 
 /** Starts enrolling an authenticator. Held in memory until `confirmTotp` or ten minutes pass. */
-export async function startTotp(env: Env): Promise<{ secret: string; uri: string }> {
+export async function startTotp(env: Env): Promise<{ secret: string; uri: string; qr: string }> {
   const owner = await loadOwner(env);
   if (!owner) throw unauthorized();
   if (owner.totp_secret) throw new HttpError("two_step_enabled", 409, "The authenticator is already on");
   const secret = randomBytes(20);
   env.OWNER_TOTP_PENDING = { secret, expiresAt: Date.now() + PENDING_MS };
   const b32 = base32Encode(secret);
-  return { secret: b32, uri: totpURI(owner.email, b32) };
+  const uri = totpURI(owner.email, b32);
+  return { secret: b32, uri, qr: qrSVG(uri) };
 }
 
 /** With `req`, wrong codes count against that address like wrong passwords do. */

@@ -48,6 +48,7 @@
     b.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!b.dataset.copy) return;
       try {
         await navigator.clipboard.writeText(b.dataset.copy);
         const label = $('span', b);
@@ -329,10 +330,17 @@
       // A fresh key each time the dialog opens.
       const secret = $('[data-secret]', d);
       const uri = $('[data-uri]', d);
+      const qr = $('[data-qr]', d);
+      const copy = $('[data-copy-secret]', d);
       secret.textContent = '…';
+      qr.textContent = '';
+      copy.dataset.copy = '';
       try {
         const r = await call('POST', '/admin/api/owner/totp/start');
+        // The server draws the code as a plain SVG (no scripts or styles).
+        qr.innerHTML = r.qr;
         secret.textContent = r.secret.replace(/(.{4})/g, '$1 ').trim();
+        copy.dataset.copy = r.secret;
         uri.href = r.uri;
         dialogFields.get(d).focus();
       } catch (x) {

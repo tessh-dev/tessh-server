@@ -16,6 +16,7 @@ import {
   startTotp,
   verifyPassword,
 } from "../src/owner.ts";
+import { qrSVG } from "../src/qr.ts";
 import { base32Decode, stepAt, totpAt } from "../src/totp.ts";
 import { makeEnv } from "./harness.ts";
 
@@ -137,8 +138,9 @@ describe("owner login", () => {
 
   it("keeps the secret sealed and builds the otpauth link", async () => {
     const env = await setup();
-    const { secret, uri } = await startTotp(env);
+    const { secret, uri, qr } = await startTotp(env);
     expect(uri).toBe(`otpauth://totp/Tessh%20Server:owner%40example.com?secret=${secret}&issuer=Tessh%20Server`);
+    expect(qr).toBe(qrSVG(uri));
     await confirmTotp(env, await totpAt(base32Decode(secret), stepAt(Date.now())));
     const row = await env.DB.prepare("SELECT totp_secret FROM owner").first<{ totp_secret: Uint8Array }>();
     expect(row!.totp_secret.length).toBe(12 + 20 + 16);

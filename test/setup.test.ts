@@ -4,6 +4,7 @@ import { handle, type Env } from "../src/index.ts";
 import { createOwner, resetOwnerAttempts, signIn } from "../src/owner.ts";
 import { issueSetupCode, resetSetupAttempts } from "../src/setup-code.ts";
 import { loadSettings } from "../src/settings.ts";
+import { qrSVG } from "../src/qr.ts";
 import { base32Decode, stepAt, totpAt } from "../src/totp.ts";
 import { freshDB, makeEnv } from "./harness.ts";
 
@@ -132,11 +133,17 @@ describe("browser setup", () => {
     expect(settingRow(env, "name")).toBe("Holmes Lab");
     expect(settingRow(env, "public_url")).toBe("https://sync.example.com");
 
-    expect(await b.html()).toContain("Owner login");
+    const ownerPage = await b.html();
+    expect(ownerPage).toContain("Owner login");
+    // A QR code first; the key to type in is folded behind "Can't scan?", with a copy button and the link.
+    expect(ownerPage).toContain("Scan this with your authenticator app, then type the code it shows.");
+    expect(ownerPage).toMatch(/<div class="qr" data-qr><\/div>\s*<details class="where manual"><summary>[\s\S]*Can't scan\? Enter the key instead[\s\S]*data-secret[\s\S]*data-copy-secret[\s\S]*data-uri[\s\S]*<\/details>\s*<div class="otp-box" id="totp"/);
+    expect(ownerPage).not.toMatch(/<script(?![^>]*\ssrc=)|<style|\sstyle=/);
     const totp = await b.post("/setup/api/owner/totp", {});
     expect(totp.status).toBe(200);
-    const { secret, uri } = (await totp.json()) as { secret: string; uri: string };
+    const { secret, uri, qr } = (await totp.json()) as { secret: string; uri: string; qr: string };
     expect(uri).toBe(`otpauth://totp/Tessh%20Server:Holmes%20Lab?secret=${secret}&issuer=Tessh%20Server`);
+    expect(qr).toBe(qrSVG(uri));
     const totpCode = await totpAt(base32Decode(secret), stepAt(Date.now()));
     const owner = await b.post("/setup/api/owner", { email: "Owner@Example.com", password: PW, totpCode });
     expect(owner.status).toBe(200);

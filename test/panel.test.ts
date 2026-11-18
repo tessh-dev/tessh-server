@@ -360,8 +360,11 @@ describe("fix: address, activity filter, enrolment limits", () => {
 
 describe("owner login in settings", () => {
   it("authenticator on, sign in with a code, then off", async () => {
+    const settings = await (await panel("GET", "/admin/settings")).text();
+    expect(settings).toMatch(/<h4 id="totp-on-title">Turn on the authenticator<\/h4><p class="cap">Scan this with your authenticator app[\s\S]*<div class="qr" data-qr><\/div>\s*<details class="where manual">[\s\S]*Can't scan\? Enter the key instead[\s\S]*data-copy-secret[\s\S]*<\/details>\s*<div class="otp-box" id="totp-code"/);
     const start = await j(await panel("POST", "/admin/api/owner/totp/start"));
     expect(start.uri).toContain("otpauth://totp/");
+    expect(start.qr).toMatch(/^<svg [^>]*viewBox="0 0 \d+ \d+" shape-rendering="crispEdges"/);
     const key = base32Decode(start.secret);
     expect((await panel("POST", "/admin/api/owner/totp/confirm", { code: "000000" })).status).toBe(401);
     expect((await panel("POST", "/admin/api/owner/totp/confirm", { code: await totpAt(key, stepAt(Date.now())) })).status).toBe(200);

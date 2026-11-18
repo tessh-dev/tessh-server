@@ -1,9 +1,10 @@
 // Behaviour for the setup pages: each step posts JSON to /setup/api/* and then reloads /setup, which shows
 // the next step. The last step of each flow shows its finished card in place.
-// Copy buttons that carry their text (the "Where's the code?" command), on every setup card.
-document.querySelectorAll('button[data-copy]:not([data-copy=""])').forEach((btn) => {
+// Copy buttons that carry their text (the "Where's the code?" command, the authenticator key), on every setup card.
+document.querySelectorAll('button[data-copy]').forEach((btn) => {
   btn.addEventListener('click', async () => {
     const label = btn.querySelector('span');
+    if (!btn.dataset.copy) return;
     try {
       await navigator.clipboard.writeText(btn.dataset.copy);
       label.textContent = 'Copied';
@@ -159,6 +160,8 @@ document.querySelectorAll('button[data-copy]:not([data-copy=""])').forEach((btn)
     const box = form.querySelector('[data-totp]');
     const secretEl = form.querySelector('[data-secret]');
     const uriEl = form.querySelector('[data-uri]');
+    const qrEl = form.querySelector('[data-qr]');
+    const copyEl = form.querySelector('[data-copy-secret]');
     let enrolled = false;
     let sending = false;
 
@@ -210,8 +213,11 @@ document.querySelectorAll('button[data-copy]:not([data-copy=""])').forEach((btn)
     async function enrol() {
       if (enrolled) return;
       try {
-        const { secret, uri } = await post('/setup/api/owner/totp', {});
+        const { secret, uri, qr } = await post('/setup/api/owner/totp', {});
+        // The server draws the code as a plain SVG (no scripts or styles).
+        qrEl.innerHTML = qr;
         secretEl.textContent = secret.match(/.{1,4}/g).join(' ');
+        copyEl.dataset.copy = secret;
         uriEl.href = uri;
         enrolled = true;
       } catch (x) {

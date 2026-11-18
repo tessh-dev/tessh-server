@@ -77,6 +77,14 @@ a.btn{text-decoration:none}
 .totp{padding:12px 14px;margin-top:10px}.totp .cap{margin:0}.totp .fr{padding:8px 0 0;min-height:0}
 .secret{font:600 15px var(--mono);letter-spacing:.04em;color:var(--ink);margin:8px 0 4px;word-break:break-all}
 .uri{font-size:12px;color:var(--accent);text-decoration:none}
+/* authenticator QR: dark modules on a white tile in both themes, so any camera reads it */
+.qr{width:max-content;margin:12px auto 0;padding:6px;background:#fff;border-radius:12px;box-shadow:0 0 0 1px var(--line2)}
+.qr svg{display:block;width:168px;height:168px}
+.qr:empty{width:180px;height:180px}
+.dlg .qr{margin-top:0}
+.where.manual{margin-top:8px}
+.where.manual .where-box p{margin-top:8px}
+.cmd code.key{white-space:normal;overflow-x:visible;font:600 13px var(--mono);letter-spacing:.04em;color:var(--ink)}
 .ch .what{display:block;min-width:0}
 .ch[disabled]{cursor:default;opacity:.6}
 .tagbox{padding:8px}

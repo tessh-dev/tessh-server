@@ -7,7 +7,7 @@ import { NO_LIMIT } from "../limits.ts";
 import type { OwnerSessionInfo } from "../owner.ts";
 import { icons } from "./icons.ts";
 import { updateState, type ActivityEvent, type Overview, type Person } from "./panel.ts";
-import { MARK, esc, page } from "./shell.ts";
+import { MARK, esc, page, totpEnrol } from "./shell.ts";
 
 export interface PanelContext {
   env: Env;
@@ -388,8 +388,7 @@ ${sessionRows}
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Change password</button></div>
 </form></dialog>
 <dialog class="dlg" data-dialog="totp-on" aria-labelledby="totp-on-title"><form method="dialog" data-api="/admin/api/owner/totp/confirm" data-totp-start novalidate>
-<h4 id="totp-on-title">Turn on the authenticator</h4><p class="cap">Add this key to your authenticator app, then type the code it shows.</p>
-<p class="secret" data-secret>…</p><a class="mono uri" data-uri href="#">Open in your authenticator app</a>
+<h4 id="totp-on-title">Turn on the authenticator</h4>${totpEnrol()}
 <div class="otp-box" id="totp-code" data-otp data-name="code" data-label="Authenticator code"></div>
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Turn on</button></div>

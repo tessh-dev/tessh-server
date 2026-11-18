@@ -9,9 +9,10 @@ import { createInvite } from "../invites.ts";
 import { checkWrite, confirmTotp, createOwner, createOwnerSession, totpURI } from "../owner.ts";
 import { checkSetupCode } from "../setup-code.ts";
 import { originFor, saveSetting } from "../settings.ts";
+import { qrSVG } from "../qr.ts";
 import { base32Encode, matchStep, timingSafeEqual } from "../totp.ts";
 import { icons } from "./icons.ts";
-import { MARK, esc, page } from "./shell.ts";
+import { MARK, esc, page, totpEnrol } from "./shell.ts";
 
 const COOKIE = "tessh_setup";
 const SESSION_MS = 2 * 60 * 60 * 1000;
@@ -144,7 +145,8 @@ async function postTotp(req: Request, env: Env, mode: Mode): Promise<Response> {
   const secret = randomBytes(20);
   session.totp = { secret, expiresAt: Date.now() + TOTP_MS };
   const b32 = base32Encode(secret);
-  return json({ secret: b32, uri: totpURI(env.SETTINGS.name, b32) });
+  const uri = totpURI(env.SETTINGS.name, b32);
+  return json({ secret: b32, uri, qr: qrSVG(uri) });
 }
 
 async function postOwner(req: Request, env: Env, mode: Mode): Promise<Response> {
@@ -295,9 +297,7 @@ function ownerStep(env: Env, mode: Mode): string {
 <div class="fr"><span class="frl" id="totp-label">Authenticator code too</span><span class="rec flat">Recommended</span><button type="button" class="tg" role="switch" aria-checked="true" aria-labelledby="totp-label" data-totp-toggle></button></div>
 </div>
 <div class="fg totp" data-totp>
-<p class="cap">Add this key to your authenticator app, then type the code it shows.</p>
-<p class="secret" data-secret>…</p>
-<a class="mono uri" data-uri href="#">Open in your authenticator app</a>
+${totpEnrol()}
 <div class="otp-box" id="totp" data-otp data-label="Authenticator code"></div>
 </div>
 ${ERR}
