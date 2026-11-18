@@ -1,5 +1,6 @@
 // Static files for the web pages, served under /_/. A fixed whitelist: the request path is only ever a key
 // into this map, never joined onto a directory.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +24,16 @@ const read = (name: string, file: string): Uint8Array => {
   }
   return bytes;
 };
+
+// A short hash of each file's content, worked out once at startup, so a URL changes exactly when its file does.
+const HASHES = new Map(Object.entries(FILES).map(([name, { file }]) => [name, createHash("sha256").update(read(name, file)).digest("hex").slice(0, 10)]));
+
+/** The URL of a known asset, with its content hash: `/_/tessh.css?h=0123456789`. */
+export function assetURL(name: string): string {
+  const hash = HASHES.get(name);
+  if (!hash) throw new Error(`Unknown asset ${name}`);
+  return `/_/${name}?h=${hash}`;
+}
 
 /** `/_/<name>` for a known asset, else null (the caller answers 404). */
 export function serveAsset(req: Request): Response | null {

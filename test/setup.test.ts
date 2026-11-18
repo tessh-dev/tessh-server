@@ -1,3 +1,4 @@
+import { assetURL } from "../src/web/assets.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { handle, type Env } from "../src/index.ts";
 import { createOwner, resetOwnerAttempts, signIn } from "../src/owner.ts";
@@ -106,9 +107,10 @@ describe("browser setup", () => {
     expect(first.headers.get("cache-control")).toBe("no-store");
     const codePage = await first.text();
     expect(codePage).toContain("Set up your server");
-    expect(codePage).toContain(`<script src="/_/setup.js?v=${env.VERSION}" defer></script>`);
+    expect(codePage).toContain(`<script src="${assetURL("setup.js")}" defer></script>`);
+    expect(assetURL("setup.js")).toMatch(/^\/_\/setup\.js\?h=[0-9a-f]{10}$/);
     expect(codePage).not.toMatch(/<script(?![^>]*\ssrc=)|<style|\sstyle=/);
-    expect(codePage).toContain(`<script src="/_/one-time-code.js?v=${env.VERSION}" defer></script><script src="/_/setup.js`);
+    expect(codePage).toContain(`<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL("setup.js")}"`);
     expect(codePage).toContain('data-otp data-length="8" data-charset="code" data-groups="4,4"');
 
     const unlocked = await unlock(b, code.toLowerCase());

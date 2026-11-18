@@ -1,3 +1,4 @@
+import { assetURL } from "../src/web/assets.ts";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_LIMITS, effectiveLimits, resolveLimits } from "../src/limits.ts";
 import { createOwner, resetOwnerAttempts } from "../src/owner.ts";
@@ -106,9 +107,9 @@ describe("panel pages", () => {
       expect(res.headers.get("cache-control")).toBe("no-store");
       const html = await res.text();
       expect(html).not.toMatch(/<script(?![^>]*\ssrc=)|<style|\sstyle=/);
-      expect(html).toContain(`src="/_/panel.js?v=${env.VERSION}"`);
-      expect(html).toContain(`<script src="/_/one-time-code.js?v=${env.VERSION}" defer></script><script src="/_/panel.js`);
-      expect(html).toContain(`href="/_/tessh.css?v=${env.VERSION}"`);
+      expect(html).toContain(`<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL("panel.js")}" defer>`);
+      expect(html).toContain(`href="${assetURL("tessh.css")}"`);
+      expect(html).not.toContain("?v=");
     }
     expect((await panel("GET", "/admin/nope")).status).toBe(404);
   });

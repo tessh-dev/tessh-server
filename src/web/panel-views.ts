@@ -144,7 +144,7 @@ ${inner}
 </div>
 <p class="toast" role="status" aria-live="polite" data-toast hidden></p>
 ${CONFIRM_DIALOG}${dialogs}`;
-  return page({ title: `${title} · ${s.name}`, body, script: "panel", version: ctx.env.VERSION });
+  return page({ title: `${title} · ${s.name}`, body, script: "panel" });
 }
 
 const header = (title: string, sub: string, extra = "") =>
@@ -422,12 +422,12 @@ export function renderLogin(env: Env): string {
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn primary grow" type="submit">Sign in</button></div>
 </form></main>`;
-  return page({ title: `Sign in · ${env.SETTINGS.name}`, body, script: "panel", version: env.VERSION });
+  return page({ title: `Sign in · ${env.SETTINGS.name}`, body, script: "panel" });
 }
 
 export function renderNotFound(env: Env): string {
   const body = `<main class="moment"><canvas data-field="moment" aria-hidden="true"></canvas><section class="ocard">${MARK}
 <h3>Not found</h3><p class="sub">There's nothing at this address.</p>
 <div class="acts"><a class="btn primary grow" href="/admin">Back to the panel</a></div></section></main>`;
-  return page({ title: `Not found · ${env.SETTINGS.name}`, body, script: "panel", version: env.VERSION });
+  return page({ title: `Not found · ${env.SETTINGS.name}`, body, script: "panel" });
 }

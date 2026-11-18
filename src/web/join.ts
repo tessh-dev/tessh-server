@@ -32,7 +32,6 @@ function render(env: Env, body: string): string {
   return page({
     title: `Join ${env.SETTINGS.name}`,
     body: `<main class="moment"><canvas data-field="moment" aria-hidden="true"></canvas>${body}</main>`,
-    version: env.VERSION,
   });
 }
 

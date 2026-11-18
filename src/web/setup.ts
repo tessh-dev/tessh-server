@@ -345,7 +345,6 @@ function render(req: Request, env: Env, mode: Mode): string {
     title: mode === "owner" ? "Reset the owner login · Tessh Server" : "Set up · Tessh Server",
     body: `<main class="moment"><canvas data-field="moment" aria-hidden="true"></canvas>${card}</main>`,
     script: "setup",
-    version: env.VERSION,
   });
 }
 

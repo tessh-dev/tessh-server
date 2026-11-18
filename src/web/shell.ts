@@ -1,5 +1,7 @@
 // The HTML document every web page (setup and panel) is wrapped in. CSP-compatible: styles and scripts
 // come from /_/ files only, so a page may carry no inline <script>, <style> or style="" attribute.
+// Each /_/ URL carries a hash of the file's content, so a browser fetches it fresh whenever it changes.
+import { assetURL } from "./assets.ts";
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
 /** Escape a value for HTML text and attributes. */
@@ -13,16 +15,13 @@ export interface PageOptions {
   body: string;
   /** The behaviour file to load from /_/ (deferred). */
   script?: "setup" | "panel";
-  /** The server version, added to every /_/ URL so a browser fetches fresh files after an upgrade. */
-  version?: string;
 }
 
-export function page({ title, body, script, version }: PageOptions): string {
-  const v = version ? `?v=${encodeURIComponent(version)}` : "";
+export function page({ title, body, script }: PageOptions): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="robots" content="noindex,nofollow">
-<title>${esc(title)}</title><link rel="stylesheet" href="/_/tessh.css${v}"><script src="/_/field.js${v}" defer></script>${script ? `<script src="/_/one-time-code.js${v}" defer></script><script src="/_/${script}.js${v}" defer></script>` : ""}
+<title>${esc(title)}</title><link rel="stylesheet" href="${assetURL("tessh.css")}"><script src="${assetURL("field.js")}" defer></script>${script ? `<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL(`${script}.js`)}" defer></script>` : ""}
 </head><body>
 ${body}
 </body></html>
