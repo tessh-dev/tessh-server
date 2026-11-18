@@ -27,7 +27,8 @@ export type ErrorCode =
   | "setup_code_wrong"
   | "too_many_attempts"
   | "invite_invalid"
-  | "cannot_remove_owner";
+  | "cannot_remove_owner"
+  | "code_required";
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 

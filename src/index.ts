@@ -31,6 +31,8 @@ export interface Env {
   ADMIN_PASSWORD?: string | null;
   /** The live setup code (hash only) while the server is not set up. Memory only. */
   SETUP?: { hash: string; expiresAt: number; scope: "full" | "owner" } | null;
+  /** An authenticator being enrolled for the owner, until confirmed or expired. Memory only. */
+  OWNER_TOTP_PENDING?: { secret: Uint8Array; expiresAt: number } | null;
 }
 
 /** For the apps' "Custom server" check. */
