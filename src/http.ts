@@ -22,7 +22,12 @@ export type ErrorCode =
   | "conflict"
   | "signups_closed"
   | "invite_required"
-  | "locked_by_env";
+  | "locked_by_env"
+  | "not_set_up"
+  | "setup_code_wrong"
+  | "too_many_attempts"
+  | "invite_invalid"
+  | "cannot_remove_owner";
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 

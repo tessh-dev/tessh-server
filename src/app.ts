@@ -11,6 +11,7 @@ import { handle, type Env } from "./index.ts";
 import { migrate, readMigrations } from "./migrate.ts";
 import { serve } from "./server.ts";
 import { loadSettings } from "./settings.ts";
+import { issueSetupCode, setupLogLines } from "./setup-code.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -73,6 +74,7 @@ export async function start(processEnv: NodeJS.ProcessEnv = process.env, log: (m
   log(
     `Tessh server ${env.VERSION} listening on ${config.bind}:${config.port} (${settings.publicURL ? `public URL ${settings.publicURL}` : "public URL from each request"}, sign-ups: ${settings.signups})`,
   );
+  if (!settings.setupDone) for (const line of setupLogLines(issueSetupCode(env))) log(line);
 
   return {
     config,

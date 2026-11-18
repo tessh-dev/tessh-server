@@ -29,6 +29,8 @@ export interface Env {
   INSTANCE_ID: string;
   /** HTTP Basic password for the admin panel. Unset: the admin panel refuses every request. */
   ADMIN_PASSWORD?: string | null;
+  /** The live setup code (hash only) while the server is not set up. Memory only. */
+  SETUP?: { hash: string; expiresAt: number; scope: "full" | "owner" } | null;
 }
 
 /** For the apps' "Custom server" check. */
@@ -58,9 +60,23 @@ async function api(req: Request, env: Env): Promise<Response> {
   return error("not_found", 404, "Not found");
 }
 
+/** While the server is not set up only the setup flow, its assets and the two public probes are served. */
+function notSetUp(req: Request, pathname: string): Response | null {
+  if (pathname === "/setup" || pathname.startsWith("/setup/") || pathname.startsWith("/_/")) return null;
+  if (pathname === "/v1/health" || pathname === "/v1/server") return null;
+  if (pathname === "/v1" || pathname.startsWith("/v1/")) return error("not_set_up", 503, "This server isn't set up yet");
+  const wantsHTML = (req.method === "GET" || req.method === "HEAD") && (req.headers.get("accept") ?? "").includes("text/html");
+  if (wantsHTML) return new Response(null, { status: 302, headers: { location: "/setup" } });
+  return new Response("This server isn't set up yet\n", { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } });
+}
+
 export async function handle(req: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(req.url);
   try {
+    if (!env.SETTINGS.setupDone) {
+      const blocked = notSetUp(req, pathname);
+      if (blocked) return blocked;
+    }
     if (pathname === "/v1" || pathname.startsWith("/v1/")) return await api(req, env);
     return await keysHost(req, env);
   } catch (e) {

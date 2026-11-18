@@ -5,17 +5,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { start, type App } from "../src/app.ts";
+import { saveSetting } from "../src/settings.ts";
 
 let app: App;
 let dir: string;
 let api: string;
+const logged: string[] = [];
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tessh-server-"));
   app = await start(
     { PUBLIC_URL: "https://sync.example.com", PORT: "0", BIND: "127.0.0.1", DATA_DIR: dir, SIGNUPS: "closed" },
-    () => {},
+    (m) => logged.push(m),
   );
+  saveSetting(app.env, "setup_done", "1");
   api = `http://127.0.0.1:${(app.api.address() as AddressInfo).port}`;
 });
 afterAll(async () => {
@@ -24,6 +27,11 @@ afterAll(async () => {
 });
 
 describe("node:http server", () => {
+  it("logs one setup code at boot while not set up", () => {
+    expect(logged.filter((l) => l.startsWith("  Setup code  "))).toHaveLength(1);
+    expect(logged.join("\n")).toMatch(/Setup code {2}[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}/);
+  });
+
   it("serves health and server info", async () => {
     const h = await fetch(`${api}/v1/health`);
     expect(h.status).toBe(200);
