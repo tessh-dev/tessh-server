@@ -72,11 +72,17 @@ Until setup is finished, every route except `/setup`, its assets and `/v1/health
    was opened. Checked live: HTTPS, and that the address reaches this same server.
 3. **Owner login**: email, password (strength shown), optional authenticator code (recommended, on by default).
    This login is for the panel only. The owner's Tessh account is made in the app like anyone else's.
-4. **Your team**: who can join (Invite only, recommended / Anyone with the address / Just me), names for
-   first invites (optional), storage per person (500 MB / 1 GB / 5 GB / No limit).
+4. **Who's it for?** ("You can open it up to a team later."): two choices.
+   - **Just me** (picked first): "Only you can sign up, with the code on the next screen." Nothing else to set.
+     Finishing makes sign-ups closed, with no storage limit and no invites.
+   - **Me and my team**: reveals the team options below a divider. **How people join**: Invite link (the
+     default, sign-ups `invite`) or Anyone with the address (`open`). **Invite people now** (optional): names
+     for first invites. **Storage per person**: 500 MB / 1 GB (default) / 5 GB / No limit.
+   If the server's environment sets who can join, the matching choice is picked and the other is greyed out.
 
-Then **Ready**: the invite links to copy, how to connect your own apps (choose Self-hosted, enter the address,
-the owner needs no invite), and **Open the panel**.
+Then **Ready**. For just me: your code and how to connect your apps (choose Self-hosted, enter the address),
+nothing about invites. For a team: the invite links to copy first, then the same for your own apps (the owner
+needs no invite). Both end with **Open the panel**.
 
 ### 3. Invite page
 
