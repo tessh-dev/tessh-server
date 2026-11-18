@@ -60,6 +60,7 @@ export async function start(processEnv: NodeJS.ProcessEnv = process.env, log: (m
     SETTINGS: settings,
     INSTANCE_ID: randomBytes(8).toString("hex"),
     UPDATE_CHECK: processEnv.UPDATE_CHECK?.trim().toLowerCase() !== "false",
+    DATA_DIR: config.dataDir,
   };
 
   const api = serve((req) => handle(req, env));

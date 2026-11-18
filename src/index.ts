@@ -39,6 +39,8 @@ export interface Env {
   /** The daily update check: whether it runs (UPDATE_CHECK=false turns it off) and the newer release it found, if any. Memory only. */
   UPDATE_CHECK?: boolean;
   UPDATE_LATEST?: string | null;
+  /** The data volume, where nightly backups go (the panel reads the newest one's time). Unset in tests. */
+  DATA_DIR?: string;
 }
 
 /** For the apps' "Custom server" check. */

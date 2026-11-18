@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { backupBytes, msUntilNightly, runBackup, scheduleBackups } from "../src/backup.ts";
+import { backupBytes, lastBackupAt, msUntilNightly, runBackup, scheduleBackups } from "../src/backup.ts";
 import { createOwner, resetOwnerAttempts } from "../src/owner.ts";
 import { seal, stepAt, totpAt } from "../src/totp.ts";
 import { SELF, env, makeEnv } from "./harness.ts";
@@ -50,6 +50,14 @@ describe("backups", () => {
     expect(names).toContain("tessh-2026-11-10.db");
     expect(names).toContain("tessh-2026-11-04.db");
     expect(names).not.toContain("tessh-2026-11-03.db");
+  });
+
+  it("knows when the newest nightly backup was written", () => {
+    const dir = tmp();
+    expect(lastBackupAt(dir)).toBeNull();
+    const before = Date.now() - 1000;
+    runBackup(makeEnv(), dir, new Date(2026, 10, 18, 3, 0));
+    expect(lastBackupAt(dir)!.getTime()).toBeGreaterThanOrEqual(before);
   });
 
   it("works out the wait until 03:00 local time", () => {

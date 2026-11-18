@@ -1,6 +1,6 @@
 // Backups: one SQLite file made with VACUUM INTO, a consistent copy that is safe while the server runs.
 // A nightly one goes into the data volume (newest 7 kept); the owner can also download a fresh one.
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Env } from "./index.ts";
@@ -27,6 +27,24 @@ export function runBackup(env: Env, dir: string, now = new Date()): string {
   const old = readdirSync(backups).filter((f) => NIGHTLY.test(f)).sort().reverse().slice(KEEP);
   for (const f of old) rmSync(join(backups, f), { force: true });
   return file;
+}
+
+/** When the newest nightly backup in `<dir>/backups` was written, or null when there is none. */
+export function lastBackupAt(dir: string): Date | null {
+  let names: string[];
+  try {
+    names = readdirSync(join(dir, "backups")).filter((f) => NIGHTLY.test(f));
+  } catch {
+    return null;
+  }
+  let newest: Date | null = null;
+  for (const f of names) {
+    try {
+      const t = statSync(join(dir, "backups", f)).mtime;
+      if (!newest || t > newest) newest = t;
+    } catch {}
+  }
+  return newest;
 }
 
 /** A fresh backup in memory for the owner to download. The temporary file is gone before this returns. */
