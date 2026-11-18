@@ -8,6 +8,7 @@ import { keypageRoutes } from "./keypage.ts";
 import { keysHost } from "./keys-host.ts";
 import { recoveryRoutes } from "./recovery.ts";
 import { syncRoutes } from "./sync.ts";
+import { serveAsset } from "./web/assets.ts";
 import { twoStepRoutes } from "./two-step.ts";
 import { HttpError, error, errorFrom, json } from "./http.ts";
 import { originFor, type Settings } from "./settings.ts";
@@ -79,6 +80,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
       const blocked = notSetUp(req, pathname);
       if (blocked) return blocked;
     }
+    if (pathname.startsWith("/_/")) return serveAsset(req) ?? error("not_found", 404, "Not found");
     if (pathname === "/v1" || pathname.startsWith("/v1/")) return await api(req, env);
     return await keysHost(req, env);
   } catch (e) {

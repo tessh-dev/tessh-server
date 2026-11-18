@@ -18,6 +18,7 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY package.json LICENSE ./
 COPY migrations ./migrations
+COPY assets ./assets
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data

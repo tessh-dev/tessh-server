@@ -2,6 +2,7 @@
 // so widths/heights come from classes (w0…w20, h0…h20) and behaviour from /admin.js via data attributes.
 import type { AccountDetail, AccountSummary, AuditRow, Filter } from "./admin.ts";
 import type { Signups } from "./config.ts";
+import { esc } from "./web/shell.ts";
 
 export interface Ctx {
   admin: string;
@@ -10,8 +11,7 @@ export interface Ctx {
   counts: { accounts: number };
 }
 
-const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-export const esc = (v: unknown): string => String(v ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
+export { esc };
 
 const MiB = 1024 * 1024;
 export function fmtBytes(n: number): string {
