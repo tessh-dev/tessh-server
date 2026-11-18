@@ -7,6 +7,7 @@ describe("web assets", () => {
   const cases: [string, string][] = [
     ["/_/tessh.css", "text/css"],
     ["/_/field.js", "text/javascript"],
+    ["/_/setup.js", "text/javascript"],
     ["/_/AlloRound.woff2", "font/woff2"],
   ];
   for (const [path, type] of cases) {

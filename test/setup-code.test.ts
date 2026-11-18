@@ -131,8 +131,11 @@ describe("not-set-up gate", () => {
     const info = await get(env, "/v1/server");
     expect(info.status).toBe(200);
     expect((await info.json()) as { setUp: boolean }).toMatchObject({ setUp: false });
-    for (const p of ["/setup", "/setup/code", "/_/app.css"]) expect((await get(env, p, { accept: "text/html" })).status).not.toBe(503);
-    expect((await get(env, "/setup", { accept: "text/html" })).headers.get("location")).toBeNull();
+    const setup = await get(env, "/setup", { accept: "text/html" });
+    expect(setup.status).toBe(200);
+    expect(await setup.text()).toContain("Set up your server");
+    expect((await get(env, "/_/tessh.css")).status).toBe(200);
+    expect((await get(env, "/setup/code", { accept: "text/html" })).status).toBe(404);
   });
 
   it("is inactive once set up", async () => {

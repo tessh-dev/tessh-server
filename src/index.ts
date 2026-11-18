@@ -1,4 +1,4 @@
-// The request handler: `/v1/*` is the sync API, everything else is the public key pages
+// The request handler: `/v1/*` is the sync API, `/setup` the browser setup, everything else is the public key pages
 // (`/<username>`, `/<username>/install.sh`, ...). The admin panel is a separate handler (src/admin.ts)
 // served on its own port.
 import { accountRoutes } from "./accounts.ts";
@@ -9,6 +9,7 @@ import { keysHost } from "./keys-host.ts";
 import { recoveryRoutes } from "./recovery.ts";
 import { syncRoutes } from "./sync.ts";
 import { serveAsset } from "./web/assets.ts";
+import { setupRoutes } from "./web/setup.ts";
 import { twoStepRoutes } from "./two-step.ts";
 import { HttpError, error, errorFrom, json } from "./http.ts";
 import { originFor, type Settings } from "./settings.ts";
@@ -32,6 +33,8 @@ export interface Env {
   ADMIN_PASSWORD?: string | null;
   /** The live setup code (hash only) while the server is not set up. Memory only. */
   SETUP?: { hash: string; expiresAt: number; scope: "full" | "owner" } | null;
+  /** The browser that typed the setup code: a hash of its token, bound to that code. Memory only. */
+  SETUP_SESSION?: { hash: string; codeHash: string; expiresAt: number; totp: { secret: Uint8Array; expiresAt: number } | null } | null;
   /** An authenticator being enrolled for the owner, until confirmed or expired. Memory only. */
   OWNER_TOTP_PENDING?: { secret: Uint8Array; expiresAt: number } | null;
 }
@@ -52,7 +55,8 @@ async function api(req: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(req.url);
   const read = req.method === "GET" || req.method === "HEAD";
   if (read && pathname === "/v1/health") return json({ ok: true });
-  if (read && pathname === "/v1/server") return json(serverInfo(req, env));
+  // Public, and read cross-origin by the setup page to check an address reaches this server.
+  if (read && pathname === "/v1/server") return json(serverInfo(req, env), 200, { "access-control-allow-origin": "*" });
   const res =
     (await twoStepRoutes(req, env)) ??
     (await accountRoutes(req, env)) ??
@@ -82,6 +86,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     }
     if (pathname.startsWith("/_/")) return serveAsset(req) ?? error("not_found", 404, "Not found");
     if (pathname === "/v1" || pathname.startsWith("/v1/")) return await api(req, env);
+    if (pathname === "/setup" || pathname.startsWith("/setup/")) return await setupRoutes(req, env);
     return await keysHost(req, env);
   } catch (e) {
     if (e instanceof HttpError) return errorFrom(e);

@@ -181,6 +181,10 @@ export async function createOwner(env: Env, email: string, password: string): Pr
 
 // ---- Authenticator ----
 
+/** The link an authenticator app takes; `account` is the name it shows under "Tessh Server". */
+export const totpURI = (account: string, secretB32: string): string =>
+  `otpauth://totp/Tessh%20Server:${encodeURIComponent(account)}?secret=${secretB32}&issuer=Tessh%20Server`;
+
 /** Starts enrolling an authenticator. Held in memory until `confirmTotp` or ten minutes pass. */
 export async function startTotp(env: Env): Promise<{ secret: string; uri: string }> {
   const owner = await loadOwner(env);
@@ -189,10 +193,7 @@ export async function startTotp(env: Env): Promise<{ secret: string; uri: string
   const secret = randomBytes(20);
   env.OWNER_TOTP_PENDING = { secret, expiresAt: Date.now() + PENDING_MS };
   const b32 = base32Encode(secret);
-  return {
-    secret: b32,
-    uri: `otpauth://totp/Tessh%20Server:${encodeURIComponent(owner.email)}?secret=${b32}&issuer=Tessh%20Server`,
-  };
+  return { secret: b32, uri: totpURI(owner.email, b32) };
 }
 
 export async function confirmTotp(env: Env, code: string): Promise<void> {
@@ -301,6 +302,14 @@ export async function signIn(env: Env, req: Request, input: { email: unknown; pa
   }
 }
 
+/** A write from the panel or setup pages: the custom header (which a cross-site form can't send) and, when the browser sends one, an Origin from `origins`. */
+export function checkWrite(req: Request, origins: string[]): void {
+  const origin = req.headers.get("origin");
+  if (req.headers.get("x-tessh-owner") !== "1" || (origin !== null && !origins.includes(origin))) {
+    throw new HttpError("forbidden", 403, "Request not allowed");
+  }
+}
+
 /** Throws unless the request carries a live owner session. Writes also need the panel header and a same-origin Origin. */
 export async function requireOwner(env: Env, req: Request): Promise<{ tokenHash: string }> {
   const token = tokenOf(req);
@@ -313,12 +322,7 @@ export async function requireOwner(env: Env, req: Request): Promise<{ tokenHash:
     if (row) await env.DB.prepare("DELETE FROM owner_sessions WHERE token_hash = ?").bind(tokenHash).run();
     throw unauthorized();
   }
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    const origin = req.headers.get("origin");
-    if (req.headers.get("x-tessh-owner") !== "1" || (origin !== null && origin !== new URL(originFor(req, env)).origin)) {
-      throw new HttpError("forbidden", 403, "Request not allowed");
-    }
-  }
+  if (req.method !== "GET" && req.method !== "HEAD") checkWrite(req, [new URL(originFor(req, env)).origin]);
   if (now - seen >= TOUCH_MS) {
     await env.DB.prepare("UPDATE owner_sessions SET last_seen_at = ? WHERE token_hash = ?").bind(new Date(now).toISOString(), tokenHash).run();
   }
