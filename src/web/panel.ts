@@ -1,11 +1,12 @@
-// The owner's panel at /admin: Overview, Team, Invites, Activity and Settings, plus its JSON API under
+// The owner's panel at /admin: Overview, Devices (just me) or Team and Invites, Activity, Settings and
+// Maintenance, plus its JSON API under
 // /admin/api/. Every page and call needs an owner session (src/owner.ts); writes also need the panel header and
 // a same-origin request, and every change is written to the audit log under the owner's email.
 // Zero-knowledge: only names, emails, usernames, device names, counts, sizes and dates leave here. The panel never
 // shows vault data, keys, hashes, salts or auth data. The one exception is the owner's full backup download, which
 // is the whole database and so needs the owner's password (and authenticator code) again.
 import { deleteUserStatements } from "../accounts.ts";
-import { backupBytes, dateStamp } from "../backup.ts";
+import { backupBytes, dateStamp, lastBackupAt } from "../backup.ts";
 import { normalisePublicURL, type Signups } from "../config.ts";
 import { HttpError, MAX_BODY_BYTES, errorFrom, json } from "../http.ts";
 import type { Env } from "../index.ts";
@@ -30,12 +31,15 @@ import {
   formatBytes,
   isApple,
   renderActivity,
+  renderDevices,
   renderInvites,
+  renderMaintenance,
   renderLogin,
   renderNotFound,
   renderOverview,
   renderSettings,
   renderTeam,
+  type Health,
   type PanelContext,
 } from "./panel-views.ts";
 
@@ -162,8 +166,8 @@ export interface Overview {
   recent: ActivityEvent[];
 }
 
-async function overview(env: Env, host: string): Promise<Overview> {
-  const list = await people(env, host);
+async function overview(env: Env, host: string, everyone?: Person[]): Promise<Overview> {
+  const list = everyone ?? (await people(env, host));
   const unlimited = list.some((p) => p.limit.bytes === NO_LIMIT);
   return {
     people: list.length,
@@ -536,22 +540,63 @@ async function activityUser(env: Env, url: URL): Promise<string | null> {
   return user;
 }
 
+/** Sidebar counts. Waiting invites are member invites only: the owner's own code is not an invite. */
 async function sidebarCounts(env: Env): Promise<{ people: number; waiting: number }> {
   const r = await env.DB.prepare(
     `SELECT (SELECT COUNT(*) FROM users) AS people,
-       (SELECT COUNT(*) FROM invites WHERE used_at IS NULL AND cancelled_at IS NULL AND (expires_at IS NULL OR expires_at > ?)) AS waiting`,
+       (SELECT COUNT(*) FROM invites WHERE kind = 'member' AND used_at IS NULL AND cancelled_at IS NULL AND (expires_at IS NULL OR expires_at > ?)) AS waiting`,
   )
     .bind(new Date().toISOString())
     .first<{ people: number; waiting: number }>();
   return { people: r?.people ?? 0, waiting: r?.waiting ?? 0 };
 }
 
+/** The owner's own Tessh account (the one that signed up with the owner code), or null until there is one. */
+async function ownerAccount(env: Env, host: string): Promise<Person | null> {
+  const id = env.SETTINGS.ownerUserId;
+  return id ? ((await people(env, host, id))[0] ?? null) : null;
+}
+
+/** The owner code setup made, while it is still waiting to be used. */
+async function ownerCode(env: Env): Promise<string | null> {
+  const r = await env.DB.prepare(
+    `SELECT code FROM invites WHERE kind = 'owner' AND used_at IS NULL AND cancelled_at IS NULL AND (expires_at IS NULL OR expires_at > ?)
+     ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(new Date().toISOString())
+    .first<{ code: string }>();
+  return r?.code ?? null;
+}
+
+function health(env: Env, origin: string): Health {
+  const last = env.DATA_DIR ? lastBackupAt(env.DATA_DIR) : null;
+  return {
+    uptimeMs: Math.round(process.uptime() * 1000),
+    lastBackup: last ? last.toISOString() : null,
+    https: (env.SETTINGS.publicURL ?? origin).startsWith("https:"),
+  };
+}
+
 async function pages(req: Request, env: Env, path: string, url: URL): Promise<string> {
   const { tokenHash } = await requireOwner(env, req);
   const origin = originFor(req, env);
   const host = new URL(origin).host;
-  const ctx: PanelContext = { env, origin, host, counts: await sidebarCounts(env), now: Date.now() };
-  if (path === "") return renderOverview(ctx, await overview(env, host));
+  const owner = (await ownerInfo(env)) ?? { email: "", totp: false };
+  const ctx: PanelContext = { env, origin, host, counts: await sidebarCounts(env), now: Date.now(), ownerEmail: owner.email };
+  if (path === "") {
+    const list = await people(env, host);
+    const mine = list.find((p) => p.role === "owner") ?? null;
+    return renderOverview(ctx, await overview(env, host, list), {
+      people: list,
+      owner: mine,
+      ownerCode: mine ? null : await ownerCode(env),
+      health: health(env, origin),
+    });
+  }
+  if (path === "devices") {
+    const mine = await ownerAccount(env, host);
+    return renderDevices(ctx, mine, mine ? null : await ownerCode(env));
+  }
   if (path === "team") return renderTeam(ctx, await people(env, host), null);
   const t = /^team\/([^/]+)$/.exec(path);
   if (t) {
@@ -570,8 +615,9 @@ async function pages(req: Request, env: Env, path: string, url: URL): Promise<st
     const sessions = (await listOwnerSessions(env, tokenHash)).filter(
       (s) => now - Date.parse(s.last_seen_at) < SESSION_IDLE_MS && now - Date.parse(s.created_at) < SESSION_MAX_MS,
     );
-    return renderSettings(ctx, (await ownerInfo(env)) ?? { email: "", totp: false }, sessions);
+    return renderSettings(ctx, owner, sessions);
   }
+  if (path === "maintenance") return renderMaintenance(ctx, owner, health(env, origin));
   throw notFound();
 }
 

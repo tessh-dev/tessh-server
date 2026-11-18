@@ -2,7 +2,7 @@ import { assetURL } from "../src/web/assets.ts";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_LIMITS, effectiveLimits, resolveLimits } from "../src/limits.ts";
 import { createOwner, resetOwnerAttempts } from "../src/owner.ts";
-import { listInvites } from "../src/invites.ts";
+import { cancelInvite, createInvite, listInvites } from "../src/invites.ts";
 import { writeItems } from "../src/sync.ts";
 import { base32Decode, stepAt, totpAt } from "../src/totp.ts";
 import { SELF, env } from "./harness.ts";
@@ -52,7 +52,7 @@ beforeEach(() => resetOwnerAttempts());
 
 describe("panel sign-in", () => {
   it("not signed in: pages go to the sign-in page, the API is 401", async () => {
-    for (const path of ["/admin", "/admin/team", "/admin/invites", "/admin/activity", "/admin/settings", `/admin/team/${uuid()}`]) {
+    for (const path of ["/admin", "/admin/devices", "/admin/team", "/admin/invites", "/admin/activity", "/admin/settings", "/admin/maintenance", `/admin/team/${uuid()}`]) {
       const res = await panel("GET", path, undefined, { cookie: null });
       expect([res.status, res.headers.get("location")], path).toEqual([302, "/admin/login"]);
     }
@@ -98,7 +98,7 @@ describe("panel sign-in", () => {
 describe("panel pages", () => {
   it("serve HTML with a strict CSP, versioned assets and no inline script or style", async () => {
     const { userId } = await registerUser("page@x.com");
-    for (const path of ["/admin", "/admin/team", `/admin/team/${userId}`, "/admin/invites", "/admin/activity", "/admin/settings", "/admin/login"]) {
+    for (const path of ["/admin", "/admin/devices", "/admin/team", `/admin/team/${userId}`, "/admin/invites", "/admin/activity", "/admin/settings", "/admin/maintenance", "/admin/login"]) {
       const res = await panel("GET", path, undefined, path === "/admin/login" ? { cookie: null } : {});
       expect(res.status, path).toBe(200);
       const csp = res.headers.get("content-security-policy")!;
@@ -114,13 +114,14 @@ describe("panel pages", () => {
     expect((await panel("GET", "/admin/nope")).status).toBe(404);
   });
 
-  it("the sidebar shows the server, counts, version and sign out", async () => {
+  it("the sidebar shows the server, counts, version, the owner and sign out", async () => {
     const html = await (await panel("GET", "/admin")).text();
     expect(html).toContain(env.SETTINGS.name);
     expect(html).toContain("keys.test");
     expect(html).toContain(`Running · ${env.VERSION}`);
-    expect(html).toContain("Sign out");
-    for (const label of ["Overview", "Team", "Invites", "Activity", "Settings"]) expect(html).toContain(label);
+    expect(html).toContain(`<small>${OWNER}</small>`);
+    expect(html).toContain('aria-label="Sign out"');
+    for (const label of ["Overview", "Team", "Invites", "Activity", "Settings", "Maintenance"]) expect(html).toContain(`<span>${label}</span>`);
   });
 
   it("Team carries the privacy note, the key page and the owner chip", async () => {
@@ -139,6 +140,116 @@ describe("panel pages", () => {
     const { userId } = await registerUser("nokey@x.com");
     const html = await (await panel("GET", `/admin/team/${userId}`)).text();
     expect(html).toContain("No key page yet");
+  });
+});
+
+describe("panel layout by mode", () => {
+  const nav = (html: string) => [...html.matchAll(/<a class="nav[^"]*" href="([^"]+)"/g)].map((m) => m[1]);
+  async function asSolo<T>(fn: () => Promise<T>): Promise<T> {
+    const was = env.SETTINGS.signups;
+    env.SETTINGS.signups = "closed";
+    try {
+      return await fn();
+    } finally {
+      env.SETTINGS.signups = was;
+    }
+  }
+
+  it("Just me shows Devices and hides Team and Invites; a team server is the other way round", async () => {
+    const solo = await asSolo(async () => (await panel("GET", "/admin")).text());
+    expect(nav(solo)).toEqual(["/admin", "/admin/devices", "/admin/activity", "/admin/settings", "/admin/maintenance"]);
+    expect(solo).toContain('<div class="grp">Server</div>');
+    expect(solo).toMatch(/<p>Just you · <span class="mono">keys\.test<\/span><\/p>/);
+    const team = await (await panel("GET", "/admin")).text();
+    expect(nav(team)).toEqual(["/admin", "/admin/team", "/admin/invites", "/admin/activity", "/admin/settings", "/admin/maintenance"]);
+    expect(team).toMatch(/<p>\d+ (person|people) · <span class="mono">keys\.test<\/span><\/p>/);
+  });
+
+  it("the Invites count is waiting member invites only, not the owner code", async () => {
+    const origin = BASE;
+    const owner = createInvite(env, { label: "Owner", days: null, kind: "owner", origin });
+    const member = createInvite(env, { label: "Count me", days: 7, kind: "member", origin });
+    try {
+      const html = await (await panel("GET", "/admin")).text();
+      const count = listInvites(env).waiting.filter((i) => i.kind === "member").length;
+      expect(listInvites(env).waiting.length).toBe(count + 1);
+      expect(html).toContain(`<a class="nav" href="/admin/invites"><svg`);
+      expect(html).toMatch(new RegExp(`<span>Invites</span><span class="ct">${count}</span>`));
+    } finally {
+      cancelInvite(env, owner.code);
+      cancelInvite(env, member.code);
+    }
+  });
+
+  it("Overview: before the owner has an account, Sign in from your apps with Show my code", async () => {
+    const owner = createInvite(env, { label: "Owner", days: null, kind: "owner", origin: BASE });
+    try {
+      for (const html of [await (await panel("GET", "/admin")).text(), await asSolo(async () => (await panel("GET", "/admin")).text())]) {
+        expect(html).toContain("Sign in from your apps");
+        expect(html).toContain("<b>Self-hosted</b> · <span class=\"mono\">keys.test</span> · your code");
+        expect(html).toContain('data-reveal="owner-code" aria-expanded="false" aria-controls="owner-code">Show my code</button>');
+        expect(html).toMatch(new RegExp(`<div class="cmd code-out" id="owner-code" hidden><code class="key">${owner.code}</code><button[^>]* data-copy="${owner.code}"`));
+        expect(html).toContain('<section class="hero"');
+        expect(html).not.toContain('class="stat"');
+      }
+      expect(await asSolo(async () => (await panel("GET", "/admin/devices")).text())).toContain("Show my code");
+    } finally {
+      cancelInvite(env, owner.code);
+    }
+    // With the code gone and still no account, there is nothing to reveal.
+    const gone = await asSolo(async () => (await panel("GET", "/admin")).text());
+    expect(gone).toContain("Your code has been used or cancelled.");
+    expect(gone).not.toContain("Show my code");
+  });
+
+  it("Overview and Devices show the owner's own devices once they have an account", async () => {
+    const { userId } = await registerUser("mine@x.com");
+    await login("mine@x.com", "My iPhone");
+    env.SETTINGS.ownerUserId = userId;
+    try {
+      const overview = await asSolo(async () => (await panel("GET", "/admin")).text());
+      expect(overview).toContain("Your devices");
+      expect(overview).toContain('href="/admin/devices">Manage</a>');
+      expect(overview).toContain("My iPhone");
+      expect(overview).toContain("2 devices");
+      expect(overview).not.toContain("Show my code");
+      const devices = await asSolo(async () => (await panel("GET", "/admin/devices")).text());
+      expect(devices).toContain("Signed in as mine@x.com");
+      expect(devices).toContain("Test Mac");
+      expect(devices).toContain(`data-path="/admin/api/team/${userId}/devices/`);
+      expect(devices).toMatch(/0 MB of (no limit|\d)/);
+      // A team server's Overview lists people instead.
+      const team = await (await panel("GET", "/admin")).text();
+      expect(team).toContain(`href="/admin/team/${userId}"`);
+      expect(team).not.toContain("Your devices");
+    } finally {
+      env.SETTINGS.ownerUserId = null;
+    }
+  });
+
+  it("an empty Activity has a friendly line", async () => {
+    const html = await (await panel("GET", "/admin/activity?user=" + (await registerUser("quiet@x.com")).userId)).text();
+    expect(html).not.toContain("Quiet so far");
+    const fresh = (await import("../src/web/panel-views.ts")).renderActivity(
+      { env, origin: BASE, host: "keys.test", counts: { people: 0, waiting: 0 }, now: Date.now(), ownerEmail: OWNER },
+      [],
+      null,
+    );
+    expect(fresh).toContain("Nothing has happened yet");
+    expect(fresh).toContain("Quiet so far.");
+  });
+
+  it("Maintenance holds backups and updates; Settings doesn't", async () => {
+    const maintenance = await (await panel("GET", "/admin/maintenance")).text();
+    expect(maintenance).toContain('<h1>Maintenance</h1>');
+    expect(maintenance).toContain('data-open="backup"');
+    expect(maintenance).toContain('data-dialog="backup"');
+    expect(maintenance).toContain('<code>docker compose pull &amp;&amp; docker compose up -d</code><button type="button" class="btn ghost sm" data-copy="docker compose pull &amp;&amp; docker compose up -d">');
+    expect(maintenance).toContain(`<div class="mono">${env.VERSION}</div>`);
+    const settings = await (await panel("GET", "/admin/settings")).text();
+    expect(settings).not.toContain('data-dialog="backup"');
+    expect(settings).not.toContain("docker compose pull");
+    expect(settings).toContain('<a href="/admin/maintenance">Maintenance</a>');
   });
 });
 
@@ -310,7 +421,7 @@ describe("panel API", () => {
     const u = await env.DB.prepare("SELECT auth_hash, salt, wrapped_vault_key, encrypted_signing_key, recovery_hash FROM users WHERE id = ?")
       .bind(userId)
       .first<Record<string, string>>();
-    const paths = ["/admin/api/overview", "/admin/api/team", "/admin/api/activity", `/admin/api/activity?user=${userId}`, "/admin", "/admin/team", `/admin/team/${userId}`, "/admin/invites", "/admin/activity", "/admin/settings"];
+    const paths = ["/admin/api/overview", "/admin/api/team", "/admin/api/activity", `/admin/api/activity?user=${userId}`, "/admin", "/admin/devices", "/admin/team", `/admin/team/${userId}`, "/admin/invites", "/admin/activity", "/admin/settings", "/admin/maintenance"];
     for (const p of paths) {
       const res = await panel("GET", p);
       expect(res.status, p).toBe(200);

@@ -1,6 +1,5 @@
 // The panel's pages as HTML. Plain server rendering: assets/web/panel.js only adds the writes, copy buttons,
 // dialogs and segmented controls. No inline scripts, styles or style attributes (the CSP forbids them).
-import type { Signups } from "../config.ts";
 import type { Env } from "../index.ts";
 import type { InviteRow } from "../invites.ts";
 import { NO_LIMIT } from "../limits.ts";
@@ -15,9 +14,23 @@ export interface PanelContext {
   host: string;
   counts: { people: number; waiting: number };
   now: number;
+  /** The owner login's email, shown in the sidebar footer. */
+  ownerEmail: string;
 }
 
-type Section = "overview" | "team" | "invites" | "activity" | "settings";
+/** What the Overview's health tile and Maintenance say about the server itself. */
+export interface Health {
+  uptimeMs: number;
+  /** When the newest nightly backup was written, or null when there is none yet. */
+  lastBackup: string | null;
+  /** Whether the address apps use is HTTPS. */
+  https: boolean;
+}
+
+type Section = "overview" | "devices" | "team" | "invites" | "activity" | "settings" | "maintenance";
+
+/** Just me: sign-ups are closed, so the panel is about the owner's own devices, not a team. */
+const isSolo = (env: Env) => env.SETTINGS.signups === "closed";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -28,6 +41,7 @@ const STORAGE: [number, string][] = [
   [5_368_709_120, "5 GB"],
   [NO_LIMIT, "No limit"],
 ];
+const UPDATE_COMMAND = "docker compose pull && docker compose up -d";
 const PRIVACY = "The panel never shows anyone's hosts, snippets or keys. It can't: they're encrypted on their devices.";
 
 // ---- Small pieces ----
@@ -61,6 +75,26 @@ export function ago(iso: string, now: number): string {
   return new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** "12 min", "5 h", "3 days". */
+function uptime(ms: number): string {
+  if (ms < HOUR) return `${Math.max(1, Math.floor(ms / MIN))} min`;
+  if (ms < DAY) return `${Math.floor(ms / HOUR)} h`;
+  return plural(Math.floor(ms / DAY), "day", "days");
+}
+
+const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+/** A backup's time in server-local time: "03:00" today, "yesterday 03:00", then how long ago. */
+function backupTime(iso: string, now: number): string {
+  const d = new Date(iso);
+  const today = new Date(now);
+  if (d.toDateString() === today.toDateString()) return hhmm(d);
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return `yesterday ${hhmm(d)}`;
+  return ago(iso, now);
+}
+
 /** "ends in 7 days", "ends in under a day", or never for a code without an end. */
 function ends(iso: string | null, now: number): string {
   if (!iso) return "never runs out";
@@ -88,8 +122,11 @@ function eventIcon(e: ActivityEvent): string {
   return `<span class="ri">${icons[e.icon]}</span>`;
 }
 
-function eventRows(events: ActivityEvent[], now: number, empty: string): string {
-  if (events.length === 0) return `<div class="rows"><div class="row"><span class="empty">${esc(empty)}</span></div></div>`;
+const QUIET = "Quiet so far. Sign-ins, new devices and your changes show up here as they happen.";
+
+function eventRows(events: ActivityEvent[], now: number): string {
+  if (events.length === 0)
+    return `<div class="rows"><div class="row calm"><span class="ri">${icons.list}</span><div class="t"><b>Nothing has happened yet</b><small>${esc(QUIET)}</small></div></div></div>`;
   return `<div class="rows">${events
     .map((e) => `<div class="row">${eventIcon(e)}<div class="t"><b>${esc(e.text)}</b></div><span class="r">${esc(ago(e.at, now))}</span></div>`)
     .join("")}</div>`;
@@ -122,58 +159,171 @@ const CONFIRM_DIALOG = `<dialog class="dlg" data-dialog="confirm" aria-labelledb
 
 // ---- Layout ----
 
-function layout(ctx: PanelContext, section: Section, title: string, inner: string, dialogs = ""): string {
+/** The server tile: the t› glyph on a dark terminal tile, as on the apps' icon. */
+const TILE = `<span class="lg" aria-hidden="true"><span class="gly"><span class="t">t</span><span class="c">›</span><span class="b"></span></span></span>`;
+
+function layout(ctx: PanelContext, section: Section, head: { title: string; sub: string; extra?: string }, inner: string, dialogs = ""): string {
   const s = ctx.env.SETTINGS;
   const nav = (key: Section, href: string, icon: string, label: string, count?: number) =>
     `<a class="nav${key === section ? " on" : ""}" href="${href}"${key === section ? ` aria-current="page"` : ""}>${icon}<span>${label}</span>${
       count ? `<span class="ct">${count}</span>` : ""
     }</a>`;
+  const items = isSolo(ctx.env)
+    ? [nav("overview", "/admin", icons.grid, "Overview"), nav("devices", "/admin/devices", icons.laptop, "Devices"), nav("activity", "/admin/activity", icons.list, "Activity")]
+    : [
+        nav("overview", "/admin", icons.grid, "Overview"),
+        nav("team", "/admin/team", icons.people, "Team", ctx.counts.people),
+        nav("invites", "/admin/invites", icons.mail, "Invites", ctx.counts.waiting),
+        nav("activity", "/admin/activity", icons.list, "Activity"),
+      ];
+  const update = updateState(ctx.env);
+  const email = ctx.ownerEmail || "Owner";
   const body = `<div class="body app-body">
-<nav class="side" aria-label="Panel">
-<div class="vault"><span class="av"><span class="gly" aria-hidden="true"><span class="t">t</span><span class="c">›</span><span class="b"></span></span></span><div><b>${esc(s.name)}</b><small>${esc(ctx.host)}</small></div></div>
-${nav("overview", "/admin", icons.grid, "Overview")}
-${nav("team", "/admin/team", icons.people, "Team", ctx.counts.people)}
-${nav("invites", "/admin/invites", icons.mail, "Invites", ctx.counts.waiting)}
-${nav("activity", "/admin/activity", icons.list, "Activity")}
+<nav class="side" aria-label="Panel" data-side>
+<div class="srv">${TILE}<div class="srv-t"><b>${esc(s.name)}</b><small><i class="dot"></i>Running · ${esc(ctx.env.VERSION)}</small>${
+    update ? `<small class="upd">Update available</small>` : ""
+  }</div><button type="button" class="menu" data-menu aria-expanded="false" aria-controls="panel-nav" aria-label="Menu">${icons.menu}${icons.close}</button></div>
+<div class="navs" id="panel-nav">
+${items.join("\n")}
+<div class="grp">Server</div>
 ${nav("settings", "/admin/settings", icons.gear, "Settings")}
-<div class="foot"><div class="sync"><i></i>Running · ${esc(ctx.env.VERSION)}</div><button type="button" class="nav" data-act data-method="POST" data-path="/admin/api/signout" data-then="/admin/login">${icons.signout}<span>Sign out</span></button></div>
+${nav("maintenance", "/admin/maintenance", icons.archive, "Maintenance")}
+<div class="sbf"><span class="who sm ${colour(email)}" aria-hidden="true">${esc(email[0].toUpperCase())}</span><div class="sbf-t"><b>Owner</b><small>${esc(email)}</small></div><button type="button" class="iconbtn" data-act data-method="POST" data-path="/admin/api/signout" data-then="/admin/login" aria-label="Sign out" title="Sign out">${icons.signout}<span class="sr">Sign out</span></button></div>
+</div>
 </nav>
-<main class="main"><canvas data-field="top" aria-hidden="true"></canvas><div class="inner">
+<main class="main"><canvas class="strip" data-field="top" aria-hidden="true"></canvas><div class="inner">
+<div class="ph"><div><h1>${esc(head.title)}</h1><p>${head.sub}</p></div>${head.extra ? `<span class="sp"></span>${head.extra}` : ""}</div>
 ${inner}
 </div></main>
 </div>
 <p class="toast" role="status" aria-live="polite" data-toast hidden></p>
 ${CONFIRM_DIALOG}${dialogs}`;
-  return page({ title: `${title} · ${s.name}`, body, script: "panel" });
+  return page({ title: `${head.title} · ${s.name}`, body, script: "panel" });
 }
 
-const header = (title: string, sub: string, extra = "") =>
-  `<div class="ph"><div><h3>${esc(title)}</h3><p>${sub}</p></div>${extra ? `<span class="sp"></span>${extra}` : ""}</div>`;
+/** "Just you · keys.example.com" or "3 people · keys.example.com". */
+function whoLine(ctx: PanelContext, people: number): string {
+  const host = ctx.env.SETTINGS.publicURL ? new URL(ctx.env.SETTINGS.publicURL).host : ctx.host;
+  return `${isSolo(ctx.env) ? "Just you" : esc(plural(people, "person", "people"))} · <span class="mono">${esc(host)}</span>`;
+}
 
-const signupsLine = (s: Signups) => (s === "invite" ? "invite only" : s === "open" ? "open to anyone with the address" : "just you");
+/** A small heading above a card, with an optional link on the right. */
+const cap = (label: string, link?: [string, string]) =>
+  `<div class="h">${esc(label)}${link ? `<a class="r" href="${link[0]}">${esc(link[1])}</a>` : ""}</div>`;
 
 // ---- Pages ----
 
 const updateText = (u: string | null | undefined) => (u ? `Update available: ${u}` : "Up to date");
 
-function updateNote(u: string | null | undefined): string {
-  if (u === undefined) return "";
-  return `<span class="${u ? "up" : "ok"}">${esc(updateText(u))}</span>`;
+/** One device of one person, with Sign out. */
+function deviceRow(ctx: PanelContext, p: Person, d: Person["devices"][number], mine: boolean): string {
+  const live = ctx.now - Date.parse(d.lastSeenAt) < 10 * MIN ? `<span class="livedot" aria-label="Active now"></span>` : "";
+  return `<div class="row">${osTile(d.platform)}<div class="t"><b>${esc(d.name)}</b><small>${esc(platformName(d.platform))} · active ${esc(
+    ago(d.lastSeenAt, ctx.now),
+  )}</small></div><span class="r">${live}${action("Sign out", {
+    method: "POST",
+    path: `/admin/api/team/${p.id}/devices/${d.id}/sign-out`,
+    tone: "danger",
+    confirm: mine
+      ? { title: `Sign out on ${d.name}?`, text: "The app on that device stops syncing. You can sign in again.", ok: "Sign out" }
+      : { title: `Sign ${p.name} out on ${d.name}?`, text: "The app on that device stops syncing. They can sign in again.", ok: "Sign out" },
+  })}</span></div>`;
 }
 
-export function renderOverview(ctx: PanelContext, o: Overview): string {
-  const pct = o.storage.capacity ? Math.min(100, Math.round((o.storage.bytes / o.storage.capacity) * 100)) : null;
-  const bar = pct === null ? "" : `<div class="mt" role="img" aria-label="${pct}% of everyone's storage"><i data-pct="${pct}"></i></div>`;
-  const inner = `${header("Overview", `${esc(ctx.env.SETTINGS.name)} · ${esc(signupsLine(ctx.env.SETTINGS.signups))}`)}
-<div class="stats">
-<div class="stat"><small>People</small><b>${o.people}</b></div>
-<div class="stat"><small>Devices</small><b>${o.devices}</b></div>
-<div class="stat"><small>Storage</small><b>${esc(formatBytes(o.storage.bytes))}</b>${bar}</div>
-<div class="stat"><small>Version</small><b>${esc(o.version)}</b>${updateNote(o.update)}</div>
-</div>
-<div class="h">Recent activity<a class="r" href="/admin/activity">All activity</a></div>
-${eventRows(o.recent, ctx.now, "Nothing has happened yet")}`;
-  return layout(ctx, "overview", "Overview", inner);
+/** Before the owner has an account: how to sign in from the apps, with their code behind Show my code. */
+function connectCard(ctx: PanelContext, code: string | null): string {
+  const host = ctx.env.SETTINGS.publicURL ? new URL(ctx.env.SETTINGS.publicURL).host : ctx.host;
+  const reveal = code
+    ? `<button type="button" class="btn primary sm" data-reveal="owner-code" aria-expanded="false" aria-controls="owner-code">Show my code</button>
+<div class="cmd code-out" id="owner-code" hidden><code class="key">${esc(code)}</code>${copyButton(code)}</div>`
+    : `<p class="soft">Your code has been used or cancelled.</p>`;
+  return `<div class="rows connect"><div class="cn">
+<span class="ri">${icons.laptop}</span>
+<div class="t"><b>Sign in from your apps</b><p>In the Tessh app, choose <b>Self-hosted</b> · <span class="mono">${esc(host)}</span> · your code.</p>
+${reveal}</div></div></div>`;
+}
+
+export interface OverviewExtras {
+  people: Person[];
+  /** The owner's own account, or null until they sign up in an app. */
+  owner: Person | null;
+  /** The waiting owner code, when the owner has no account yet. */
+  ownerCode: string | null;
+  health: Health;
+}
+
+function heroTile(ctx: PanelContext, o: Overview, x: OverviewExtras): string {
+  const h = x.health;
+  const version =
+    o.update === undefined
+      ? esc(o.version)
+      : o.update
+        ? `${esc(o.version)} · <span class="w">update ${esc(o.update)} available</span>`
+        : `${esc(o.version)} up to date`;
+  const backup = h.lastBackup ? `last backup ${esc(backupTime(h.lastBackup, ctx.now))}` : "no backup yet";
+  const devices = isSolo(ctx.env) ? (x.owner?.devices.length ?? 0) : o.devices;
+  return `<section class="hero" aria-label="Server health"><canvas data-field="tile" aria-hidden="true"></canvas>
+<p class="l1"><span class="g">✓</span> ${esc(ctx.env.SETTINGS.name)} is running</p>
+<p class="l2"><span class="p">~ %</span> up ${esc(uptime(h.uptimeMs))} · ${backup} · ${version}</p>
+<div class="chips"><span class="chip">${esc(plural(devices, "device", "devices"))}</span><span class="chip">${esc(formatBytes(o.storage.bytes))} stored</span>${
+    h.https ? `<span class="chip">HTTPS ✓</span>` : `<a class="chip warn" href="/admin/settings">Not HTTPS</a>`
+  }</div></section>`;
+}
+
+export function renderOverview(ctx: PanelContext, o: Overview, x: OverviewExtras): string {
+  let middle: string;
+  if (isSolo(ctx.env)) {
+    if (!x.owner) middle = `${cap("Your devices")}${connectCard(ctx, x.ownerCode)}`;
+    else {
+      const rows = x.owner.devices.length
+        ? x.owner.devices
+            .slice(0, 5)
+            .map(
+              (d) =>
+                `<div class="row">${osTile(d.platform)}<div class="t"><b>${esc(d.name)}</b><small>${esc(platformName(d.platform))} · active ${esc(
+                  ago(d.lastSeenAt, ctx.now),
+                )}</small></div>${ctx.now - Date.parse(d.lastSeenAt) < 10 * MIN ? `<span class="r"><span class="livedot" aria-label="Active now"></span></span>` : ""}</div>`,
+            )
+            .join("")
+        : `<div class="row calm"><span class="ri">${icons.laptop}</span><div class="t"><b>No devices signed in</b><small>Sign in from the Tessh app with your account.</small></div></div>`;
+      middle = `${cap("Your devices", ["/admin/devices", "Manage"])}<div class="rows">${rows}</div>`;
+    }
+  } else {
+    const rows = x.people.length
+      ? x.people
+          .slice(0, 5)
+          .map(
+            (p) =>
+              `<a class="row link" href="/admin/team/${esc(p.id)}">${avatar(p.id, p.name)}<div class="t"><b>${esc(p.name)}${
+                p.role === "owner" ? ` <span class="chipn ink">Owner</span>` : ""
+              }${p.suspended ? ` <span class="chipn">Suspended</span>` : ""}</b><small>${esc(p.email)}</small></div><span class="r">${esc(
+                plural(p.devices.length, "device", "devices"),
+              )}${icons.chevron}</span></a>`,
+          )
+          .join("")
+      : `<div class="row calm"><span class="ri">${icons.people}</span><div class="t"><b>No one has joined yet</b><small>Make an invite and send them the link.</small></div><span class="r"><a class="btn ghost sm" href="/admin/invites">Invites</a></span></div>`;
+    middle = `${x.owner ? "" : `${cap("Your own apps")}${connectCard(ctx, x.ownerCode)}`}${cap("Team", ["/admin/team", "All"])}<div class="rows">${rows}</div>`;
+  }
+  const inner = `${heroTile(ctx, o, x)}
+${middle}
+${cap("Recent activity", ["/admin/activity", "All"])}
+${eventRows(o.recent, ctx.now)}`;
+  return layout(ctx, "overview", { title: "Overview", sub: whoLine(ctx, o.people) }, inner);
+}
+
+export function renderDevices(ctx: PanelContext, owner: Person | null, code: string | null): string {
+  const people = ctx.counts.people;
+  if (!owner) return layout(ctx, "devices", { title: "Devices", sub: whoLine(ctx, people) }, connectCard(ctx, code));
+  const rows = owner.devices.length
+    ? owner.devices.map((d) => deviceRow(ctx, owner, d, true)).join("")
+    : `<div class="row calm"><span class="ri">${icons.laptop}</span><div class="t"><b>No devices signed in</b><small>Sign in from the Tessh app with ${esc(owner.email)}.</small></div></div>`;
+  const used = `${formatBytes(owner.usage.bytes)} of ${owner.limit.bytes === NO_LIMIT ? "no limit" : formatBytes(owner.limit.bytes)}`;
+  const inner = `${cap(`Signed in as ${owner.email}`)}
+<div class="rows">${rows}</div>
+${cap("Storage")}
+<div class="rows"><div class="srow"><div><b>Used</b><small>${esc(plural(owner.usage.items, "item", "items"))}, encrypted on your devices</small></div><div class="mono muted">${esc(used)}</div></div></div>
+<p class="cap note">${esc("Signing a device out stops it syncing. Your data stays on the server.")}</p>`;
+  return layout(ctx, "devices", { title: "Devices", sub: whoLine(ctx, people) }, inner);
 }
 
 function personRow(ctx: PanelContext, p: Person, open: boolean): string {
@@ -189,19 +339,7 @@ function personRow(ctx: PanelContext, p: Person, open: boolean): string {
   if (!open) return head;
 
   const devices = p.devices.length
-    ? p.devices
-        .map((d) => {
-          const live = ctx.now - Date.parse(d.lastSeenAt) < 10 * MIN ? `<span class="livedot" aria-label="Active now"></span>` : "";
-          return `<div class="row">${osTile(d.platform)}<div class="t"><b>${esc(d.name)}</b><small>${esc(platformName(d.platform))} · active ${esc(
-            ago(d.lastSeenAt, ctx.now),
-          )}</small></div><span class="r">${live}${action("Sign out", {
-            method: "POST",
-            path: `/admin/api/team/${p.id}/devices/${d.id}/sign-out`,
-            tone: "danger",
-            confirm: { title: `Sign ${p.name} out on ${d.name}?`, text: "The app on that device stops syncing. They can sign in again.", ok: "Sign out" },
-          })}</span></div>`;
-        })
-        .join("")
+    ? p.devices.map((d) => deviceRow(ctx, p, d, false)).join("")
     : `<div class="row"><span class="empty">No devices signed in</span></div>`;
   const used = `${formatBytes(p.usage.bytes)} of ${p.limit.bytes === NO_LIMIT ? "no limit" : formatBytes(p.limit.bytes)}`;
   const limitButton = `<button type="button" class="btn ghost sm" data-limit="/admin/api/team/${esc(p.id)}/limit" data-limit-name="${esc(p.name)}" data-limit-current="${
@@ -247,10 +385,9 @@ function limitDialog(ctx: PanelContext): string {
 export function renderTeam(ctx: PanelContext, list: Person[], openId: string | null): string {
   const sub = `${plural(list.length, "person", "people")} · ${plural(ctx.counts.waiting, "invite", "invites")} waiting`;
   const rows = list.length ? list.map((p) => personRow(ctx, p, p.id === openId)).join("") : `<div class="row"><span class="empty">No one has joined yet</span></div>`;
-  const inner = `${header("Team", esc(sub), `<a class="btn primary sm" href="/admin/invites">${icons.plus}New invite</a>`)}
-<div class="rows">${rows}</div>
+  const inner = `<div class="rows">${rows}</div>
 <p class="cap note">${esc(PRIVACY)}</p>`;
-  return layout(ctx, "team", "Team", inner, limitDialog(ctx));
+  return layout(ctx, "team", { title: "Team", sub: esc(sub), extra: `<a class="btn primary sm" href="/admin/invites">${icons.plus}New invite</a>` }, inner, limitDialog(ctx));
 }
 
 export function renderInvites(ctx: PanelContext, inv: { waiting: InviteRow[]; used: InviteRow[] }): string {
@@ -279,8 +416,7 @@ export function renderInvites(ctx: PanelContext, inv: { waiting: InviteRow[]; us
         })
         .join("")
     : `<div class="row"><span class="empty">No one has used an invite yet</span></div>`;
-  const inner = `${header("Invites", esc(sub))}
-<form class="fg invbar" data-invite novalidate>
+  const inner = `<form class="fg invbar" data-invite novalidate>
 <input class="invl" name="label" maxlength="64" autocomplete="off" placeholder="Who's it for? A name, just for you" aria-label="Who's it for? A name, just for you">
 <div class="sg" role="radiogroup" aria-label="Runs out after"><button type="button" role="radio" aria-checked="true" class="on" data-days="7">7 days</button><button type="button" role="radio" aria-checked="false" data-days="30">30 days</button></div>
 <button class="btn primary sm" type="submit">${icons.plus}New invite</button>
@@ -291,12 +427,12 @@ export function renderInvites(ctx: PanelContext, inv: { waiting: InviteRow[]; us
 <div class="rows">${waiting}</div>
 <div class="h">Used <span>${inv.used.length}</span></div>
 <div class="rows">${used}</div>`;
-  return layout(ctx, "invites", "Invites", inner);
+  return layout(ctx, "invites", { title: "Invites", sub: esc(sub) }, inner);
 }
 
 export function renderActivity(ctx: PanelContext, events: ActivityEvent[], who: Person | null): string {
   const sub = who ? `For ${esc(who.name)} · <a href="/admin/activity">All activity</a>` : "Sign-ups, sign-ins and your changes, newest first";
-  return layout(ctx, "activity", "Activity", `${header("Activity", sub)}\n${eventRows(events, ctx.now, "Nothing has happened yet")}`);
+  return layout(ctx, "activity", { title: "Activity", sub }, eventRows(events, ctx.now));
 }
 
 /** "Safari on Mac" from a user agent, as near as can be told. */
@@ -370,14 +506,12 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
   const totp = owner.totp
     ? `<span class="okt"><i></i>Authenticator on</span><button type="button" class="btn ghost sm" data-open="totp-off">Turn off</button>`
     : `<span class="okt warn"><i></i>Authenticator off</span><button type="button" class="btn ghost sm" data-open="totp-on">Turn on</button>`;
-  const update = updateState(ctx.env);
-  const inner = `${header("Settings", "Changes save as you go")}
-<div class="h">Server</div>
+  const inner = `<div class="h">Server</div>
 <div class="rows">
 <div class="srow"><div><b>Name</b>${s.locked.name ? lockedNote : "<small>Shown in the apps</small>"}</div>${name}</div>
 <div class="srow"><div><b>Address</b>${s.locked.public_url ? lockedNote : "<small>For apps and key pages</small>"}</div>${addr}</div>
 <div class="srow"><div><b>Who can join</b>${s.locked.signups ? lockedNote : ""}</div><div>${signups}</div></div>
-<div class="srow"><div><b>Storage per person</b><small>Change one person in Team</small></div><div>${storage}</div></div>
+<div class="srow"><div><b>Storage per person</b>${isSolo(ctx.env) ? "" : "<small>Change one person in Team</small>"}</div><div>${storage}</div></div>
 </div>
 <div class="h">You</div>
 <div class="rows">
@@ -390,11 +524,7 @@ ${sessionRows}
 <div class="rows">
 <div class="srow"><div><b>Appearance</b><small>Only the panel, only here</small></div><div>${appearance}</div></div>
 </div>
-<div class="h">Maintenance</div>
-<div class="rows">
-<div class="srow"><div><b>Backups</b><small>One SQLite file</small></div><div class="btns"><button type="button" class="btn ghost sm" data-open="backup">Download a backup</button><span class="note">Nightly at 03:00 into the data volume</span></div></div>
-<div class="srow"><div><b>Updates</b><small>${esc(ctx.env.VERSION)}${update === undefined ? "" : ` · ${esc(updateText(update))}`}</small></div><div class="mono muted">docker compose pull &amp;&amp; docker compose up -d</div></div>
-</div>`;
+<p class="cap note">Backups and updates are in <a href="/admin/maintenance">Maintenance</a>.</p>`;
   const pw = (id: string, label: string, auto: string, extra = "") =>
     `<div class="fr"><label for="${id}">${label}</label><input id="${id}" type="password" required autocomplete="${auto}"${extra}></div>`;
   const dialogs = `
@@ -410,19 +540,44 @@ ${sessionRows}
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Turn on</button></div>
 </form></dialog>
-<dialog class="dlg" data-dialog="backup" aria-labelledby="backup-title"><form method="dialog" data-download="/admin/api/backup" novalidate>
-<h4 id="backup-title">Download a backup</h4><p class="cap">The file holds everyone's account data. Confirm it's you.</p>
-<div class="fg">${pw("backup-pw", "Password", "current-password", ' name="password"')}</div>${owner.totp ? `<div class="otp-box" id="backup-code" data-otp data-name="code" data-label="Authenticator code"></div>` : ""}
-<p class="err" role="alert" hidden></p>
-<div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Download</button></div>
-</form></dialog>
 <dialog class="dlg" data-dialog="totp-off" aria-labelledby="totp-off-title"><form method="dialog" data-api="/admin/api/owner/totp/disable" novalidate>
 <h4 id="totp-off-title">Turn off the authenticator</h4><p class="cap">Signing in will need only your password.</p>
 <div class="fg">${pw("totp-off-pw", "Password", "current-password", ' name="password"')}</div>
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary danger grow">Turn off</button></div>
 </form></dialog>`;
-  return layout(ctx, "settings", "Settings", inner, dialogs);
+  return layout(ctx, "settings", { title: "Settings", sub: "Changes save as you go" }, inner, dialogs);
+}
+
+export function renderMaintenance(ctx: PanelContext, owner: { totp: boolean }, h: Health): string {
+  const update = updateState(ctx.env);
+  const status =
+    update === undefined
+      ? `<small>The update check is off</small>`
+      : `<small class="${update ? "warnp" : "okp"}">${esc(updateText(update))}</small>`;
+  const inner = `<div class="h">Backups</div>
+<div class="rows">
+<div class="srow"><div><b>Download a backup</b><small>One SQLite file with everyone's account data</small></div><div class="btns"><button type="button" class="btn ghost sm" data-open="backup">Download a backup</button></div></div>
+<div class="srow"><div><b>Nightly</b><small>Nightly at 03:00 into the data volume, newest 7 kept</small></div><div class="mono muted">${
+    h.lastBackup ? `Last: ${esc(backupTime(h.lastBackup, ctx.now))}` : "No backup yet"
+  }</div></div>
+</div>
+<div class="h">Updates</div>
+<div class="rows">
+<div class="srow"><div><b>Version</b>${status}</div><div class="mono">${esc(ctx.env.VERSION)}</div></div>
+<div class="srow"><div><b>Update</b><small>Run this where your compose file is</small></div><div class="cmd"><code>${esc(UPDATE_COMMAND)}</code>${copyButton(UPDATE_COMMAND)}</div></div>
+</div>
+<p class="cap note">Up ${esc(uptime(h.uptimeMs))}. Your data and settings stay in the data volume across updates.</p>`;
+  const dialogs = `
+<dialog class="dlg" data-dialog="backup" aria-labelledby="backup-title"><form method="dialog" data-download="/admin/api/backup" novalidate>
+<h4 id="backup-title">Download a backup</h4><p class="cap">The file holds everyone's account data. Confirm it's you.</p>
+<div class="fg"><div class="fr"><label for="backup-pw">Password</label><input id="backup-pw" type="password" required autocomplete="current-password" name="password"></div></div>${
+    owner.totp ? `<div class="otp-box" id="backup-code" data-otp data-name="code" data-label="Authenticator code"></div>` : ""
+  }
+<p class="err" role="alert" hidden></p>
+<div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Download</button></div>
+</form></dialog>`;
+  return layout(ctx, "maintenance", { title: "Maintenance", sub: "Backups and updates" }, inner, dialogs);
 }
 
 export function renderLogin(env: Env): string {
