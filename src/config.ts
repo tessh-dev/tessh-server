@@ -7,14 +7,10 @@ import { join } from "node:path";
 export type Signups = "open" | "invite" | "closed";
 
 export interface Config {
-  publicURL: string;
+  /** From PUBLIC_URL when it is set. Otherwise the origin of each request is used. */
+  publicURL: string | null;
   port: number;
   bind: string;
-  adminPort: number;
-  adminBind: string;
-  adminPassword: string | null;
-  signups: Signups;
-  serverName: string;
   dataDir: string;
   dbPath: string;
 }
@@ -35,7 +31,7 @@ function port(v: string | undefined, name: string, fallback: number): number {
 
 /** `https://sync.example.com` (no trailing slash). A path, query or credentials are refused. */
 export function normalisePublicURL(v: string | undefined): string {
-  if (!v) throw new ConfigError("PUBLIC_URL is required, e.g. PUBLIC_URL=https://sync.example.com");
+  if (!v) throw new ConfigError("PUBLIC_URL is empty, e.g. PUBLIC_URL=https://sync.example.com");
   let u: URL;
   try {
     u = new URL(v);
@@ -58,14 +54,9 @@ export function parseSignups(v: string | undefined): Signups {
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const dataDir = env.DATA_DIR || "/data";
   return {
-    publicURL: normalisePublicURL(env.PUBLIC_URL),
+    publicURL: env.PUBLIC_URL ? normalisePublicURL(env.PUBLIC_URL) : null,
     port: port(env.PORT, "PORT", 8080),
     bind: env.BIND || "0.0.0.0",
-    adminPort: port(env.ADMIN_PORT, "ADMIN_PORT", 8081),
-    adminBind: env.ADMIN_BIND || "0.0.0.0",
-    adminPassword: env.ADMIN_PASSWORD ? env.ADMIN_PASSWORD : null,
-    signups: parseSignups(env.SIGNUPS),
-    serverName: (env.SERVER_NAME || "Tessh").trim().slice(0, 64) || "Tessh",
     dataDir,
     dbPath: join(dataDir, "tessh.db"),
   };

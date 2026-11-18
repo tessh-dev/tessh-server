@@ -16,6 +16,7 @@ import {
 } from "./admin-ui.ts";
 import { HttpError, MAX_BODY_BYTES, errorFrom, json } from "./http.ts";
 import type { Env } from "./index.ts";
+import { originFor } from "./settings.ts";
 import { LIMIT_SQL } from "./limits.ts";
 
 const DAY = 86_400_000;
@@ -347,7 +348,7 @@ async function pageRoute(req: Request, env: Env, admin: string, path: string, ur
   if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError("not_found", 404, "Not found");
   if (path === "/admin.css") return new Response(ADMIN_CSS, { headers: { "content-type": "text/css; charset=utf-8" } });
   if (path === "/admin.js") return new Response(ADMIN_JS, { headers: { "content-type": "text/javascript; charset=utf-8" } });
-  const ctx = { admin, host: new URL(env.PUBLIC_URL).host, signups: env.SIGNUPS, counts: await navCounts(env) };
+  const ctx = { admin, host: new URL(originFor(req, env)).host, signups: env.SIGNUPS, counts: await navCounts(env) };
   if (path === "/") {
     return html(renderOverview(ctx, await overview(env), await listAccounts(env, "", "all", 5)));
   }

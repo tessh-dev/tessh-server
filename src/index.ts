@@ -10,6 +10,7 @@ import { recoveryRoutes } from "./recovery.ts";
 import { syncRoutes } from "./sync.ts";
 import { twoStepRoutes } from "./two-step.ts";
 import { HttpError, error, errorFrom, json } from "./http.ts";
+import { originFor, type Settings } from "./settings.ts";
 
 export interface Env {
   DB: Database;
@@ -17,25 +18,36 @@ export interface Env {
   PRELOGIN_SECRET: string;
   /** base64 of 32 random bytes: AES-256-GCM key for TOTP secrets at rest. */
   TOTP_KEY: string;
-  /** The server's public origin, e.g. `https://sync.example.com`. Key page links and install lines use it. */
-  PUBLIC_URL: string;
+  /** The server's public origin, e.g. `https://sync.example.com`. Null: the origin of each request is used (see originFor). */
+  PUBLIC_URL: string | null;
   SERVER_NAME: string;
   SIGNUPS: Signups;
   VERSION: string;
+  /** The settings as loaded; saveSetting keeps it and the fields above in step. */
+  SETTINGS: Settings;
+  /** Random per boot (16 hex). The setup page uses it to tell a restart from a change of server. */
+  INSTANCE_ID: string;
   /** HTTP Basic password for the admin panel. Unset: the admin panel refuses every request. */
   ADMIN_PASSWORD?: string | null;
 }
 
 /** For the apps' "Custom server" check. */
-export function serverInfo(env: Env) {
-  return { name: env.SERVER_NAME, version: env.VERSION, signups: env.SIGNUPS, keysURL: env.PUBLIC_URL };
+export function serverInfo(req: Request, env: Env) {
+  return {
+    name: env.SERVER_NAME,
+    version: env.VERSION,
+    signups: env.SIGNUPS,
+    keysURL: originFor(req, env),
+    setUp: env.SETTINGS.setupDone,
+    instance: env.INSTANCE_ID,
+  };
 }
 
 async function api(req: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(req.url);
   const read = req.method === "GET" || req.method === "HEAD";
   if (read && pathname === "/v1/health") return json({ ok: true });
-  if (read && pathname === "/v1/server") return json(serverInfo(env));
+  if (read && pathname === "/v1/server") return json(serverInfo(req, env));
   const res =
     (await twoStepRoutes(req, env)) ??
     (await accountRoutes(req, env)) ??

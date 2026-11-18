@@ -1,15 +1,16 @@
-// Wires config, secrets, the database and both HTTP servers together. src/main.ts runs it.
+// Wires config, secrets, the database and the HTTP server together. src/main.ts runs it.
 import { readFileSync } from "node:fs";
 import { mkdirSync } from "node:fs";
 import type { Server } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { handleAdmin } from "./admin.ts";
+import { randomBytes } from "node:crypto";
 import { loadConfig, loadSecrets, type Config } from "./config.ts";
 import { Database } from "./db.ts";
 import { handle, type Env } from "./index.ts";
 import { migrate, readMigrations } from "./migrate.ts";
 import { serve } from "./server.ts";
+import { loadSettings } from "./settings.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -25,7 +26,6 @@ export interface App {
   config: Config;
   env: Env;
   api: Server;
-  admin: Server | null;
   close(): Promise<void>;
 }
 
@@ -54,37 +54,32 @@ export async function start(processEnv: NodeJS.ProcessEnv = process.env, log: (m
   const applied = migrate(db, readMigrations(join(ROOT, "migrations")));
   if (applied.length) log(`Applied migrations: ${applied.join(", ")}`);
 
+  const settings = loadSettings(db, processEnv);
   const env: Env = {
     DB: db,
     PRELOGIN_SECRET: secrets.preloginSecret,
     TOTP_KEY: secrets.totpKey,
-    PUBLIC_URL: config.publicURL,
-    SERVER_NAME: config.serverName,
-    SIGNUPS: config.signups,
+    PUBLIC_URL: settings.publicURL,
+    SERVER_NAME: settings.name,
+    SIGNUPS: settings.signups,
     VERSION: version(),
-    ADMIN_PASSWORD: config.adminPassword,
+    SETTINGS: settings,
+    INSTANCE_ID: randomBytes(8).toString("hex"),
+    ADMIN_PASSWORD: processEnv.ADMIN_PASSWORD || null,
   };
 
   const api = serve((req) => handle(req, env));
   await listen(api, config.port, config.bind);
-  log(`Tessh server ${env.VERSION} listening on ${config.bind}:${config.port} (public URL ${config.publicURL}, sign-ups: ${config.signups})`);
-
-  let admin: Server | null = null;
-  if (config.adminPassword) {
-    admin = serve((req) => handleAdmin(req, env));
-    await listen(admin, config.adminPort, config.adminBind);
-    log(`Admin panel listening on ${config.adminBind}:${config.adminPort}`);
-  } else {
-    log("Admin panel off: set ADMIN_PASSWORD to turn it on.");
-  }
+  log(
+    `Tessh server ${env.VERSION} listening on ${config.bind}:${config.port} (${settings.publicURL ? `public URL ${settings.publicURL}` : "public URL from each request"}, sign-ups: ${settings.signups})`,
+  );
 
   return {
     config,
     env,
     api,
-    admin,
     async close() {
-      await Promise.all([closeServer(api), admin ? closeServer(admin) : Promise.resolve()]);
+      await closeServer(api);
       db.close();
     },
   };

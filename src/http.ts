@@ -21,7 +21,8 @@ export type ErrorCode =
   | "plan_in_use"
   | "conflict"
   | "signups_closed"
-  | "invite_required";
+  | "invite_required"
+  | "locked_by_env";
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 

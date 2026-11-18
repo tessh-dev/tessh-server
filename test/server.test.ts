@@ -9,18 +9,14 @@ import { start, type App } from "../src/app.ts";
 let app: App;
 let dir: string;
 let api: string;
-let admin: string;
-const PASSWORD = "s3cret-admin-password";
-const auth = (p = PASSWORD) => `Basic ${Buffer.from(`ops:${p}`).toString("base64")}`;
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tessh-server-"));
   app = await start(
-    { PUBLIC_URL: "https://sync.example.com", PORT: "0", ADMIN_PORT: "0", BIND: "127.0.0.1", ADMIN_BIND: "127.0.0.1", ADMIN_PASSWORD: PASSWORD, DATA_DIR: dir, SIGNUPS: "closed" },
+    { PUBLIC_URL: "https://sync.example.com", PORT: "0", BIND: "127.0.0.1", DATA_DIR: dir, SIGNUPS: "closed" },
     () => {},
   );
   api = `http://127.0.0.1:${(app.api.address() as AddressInfo).port}`;
-  admin = `http://127.0.0.1:${(app.admin!.address() as AddressInfo).port}`;
 });
 afterAll(async () => {
   await app?.close();
@@ -57,27 +53,6 @@ describe("node:http server", () => {
     expect((await fetch(`${api}/nobody`)).status).toBe(404);
   });
 
-  it("admin is on its own port and needs the password", async () => {
-    expect((await fetch(`${admin}/`)).status).toBe(401);
-    expect((await fetch(`${admin}/`, { headers: { authorization: auth("nope") } })).status).toBe(401);
-    const ok = await fetch(`${admin}/`, { headers: { authorization: auth() } });
-    expect(ok.status).toBe(200);
-    expect(await ok.text()).toContain("Overview");
-    // And not on the public port.
-    expect((await fetch(`${api}/accounts`, { headers: { authorization: auth() } })).status).toBe(404);
-  });
-
-  it("admin writes check the origin the browser used, as a reverse proxy forwards it", async () => {
-    const send = (origin: string, extra: Record<string, string> = {}) =>
-      fetch(`${admin}/api/accounts/6f1c1e0a-0000-4000-8000-000000000000/suspend`, {
-        method: "POST",
-        headers: { authorization: auth(), "x-tessh-admin": "1", "content-type": "application/json", origin, ...extra },
-        body: "{}",
-      });
-    expect((await send("https://evil.example")).status).toBe(403);
-    expect((await send("https://admin.example.com", { "x-forwarded-proto": "https", "x-forwarded-host": "admin.example.com" })).status).toBe(404);
-  });
-
   it("writes the database and secrets to DATA_DIR", async () => {
     const { existsSync } = await import("node:fs");
     expect(existsSync(join(dir, "tessh.db"))).toBe(true);
@@ -85,14 +60,15 @@ describe("node:http server", () => {
   });
 });
 
-describe("without ADMIN_PASSWORD", () => {
-  it("the API runs and the admin port is not opened", async () => {
+describe("without PUBLIC_URL", () => {
+  it("the API runs and key pages use the request's origin", async () => {
     const d = mkdtempSync(join(tmpdir(), "tessh-server-"));
-    const a = await start({ PUBLIC_URL: "http://127.0.0.1", PORT: "0", BIND: "127.0.0.1", DATA_DIR: d }, () => {});
+    const a = await start({ PORT: "0", BIND: "127.0.0.1", DATA_DIR: d }, () => {});
     try {
-      expect(a.admin).toBeNull();
       const port = (a.api.address() as AddressInfo).port;
       expect((await fetch(`http://127.0.0.1:${port}/v1/health`)).status).toBe(200);
+      const info = (await (await fetch(`http://127.0.0.1:${port}/v1/server`)).json()) as Record<string, unknown>;
+      expect(info).toMatchObject({ keysURL: `http://127.0.0.1:${port}`, setUp: false, signups: "invite" });
     } finally {
       await a.close();
       rmSync(d, { recursive: true, force: true });

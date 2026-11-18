@@ -1,6 +1,7 @@
 // Public key pages: /<username> and its files. Serves only what a device signed and uploaded.
 import { decodeBase64, encodeBase64 } from "./auth.ts";
 import type { Env } from "./index.ts";
+import { originFor } from "./settings.ts";
 import { renderInstall } from "./install.ts";
 import { NAMESPACE, bodyLines, identityDomain, type KeyEntry, type KeyKind } from "./keypage.ts";
 import { renderHome, renderMissing, renderPage, type PublicKey } from "./page.ts";
@@ -144,7 +145,7 @@ const wantsHTML = (req: Request) => (req.headers.get("accept") ?? "").includes("
 /** Plain text for scripts; a designed page for browsers. Always 404. */
 function notFound(req: Request, env: Env, username: string | null = null): Response {
   if (wantsHTML(req)) {
-    return new Response(req.method === "HEAD" ? null : renderMissing(username, identityDomain(env.PUBLIC_URL)), {
+    return new Response(req.method === "HEAD" ? null : renderMissing(username, identityDomain(originFor(req, env))), {
       status: 404,
       headers: { "content-type": "text/html; charset=utf-8", ...HTML_HEADERS },
     });
@@ -169,9 +170,10 @@ async function keysRoute(req: Request, env: Env): Promise<Response> {
   }
   const path = new URL(req.url).pathname.replace(/\/+$/, "");
   if (path === "") {
-    const host = identityDomain(env.PUBLIC_URL);
+    const origin = originFor(req, env);
+    const host = identityDomain(origin);
     if (!wantsHTML(req)) {
-      return new Response(req.method === "HEAD" ? null : `${env.SERVER_NAME}: Tessh sync server. Key pages: ${env.PUBLIC_URL}/<username>\n`, {
+      return new Response(req.method === "HEAD" ? null : `${env.SERVER_NAME}: Tessh sync server. Key pages: ${origin}/<username>\n`, {
         headers: { "content-type": TEXT, vary: "Accept" },
       });
     }
@@ -185,8 +187,9 @@ async function keysRoute(req: Request, env: Env): Promise<Response> {
   if (!p) return notFound(req, env, m[2] === undefined ? m[1] : null);
   const keys = await verifiedKeys(p);
 
-  const host = identityDomain(env.PUBLIC_URL);
-  const origin = `${env.PUBLIC_URL}/${p.username}`;
+  const base = originFor(req, env);
+  const host = identityDomain(base);
+  const origin = `${base}/${p.username}`;
   const ok = (body: string, type = TEXT, extra: Record<string, string> = {}) =>
     new Response(req.method === "HEAD" ? null : body, { headers: { "content-type": type, "cache-control": CACHE, ...extra } });
   const file = m[2];
@@ -218,7 +221,7 @@ async function keysRoute(req: Request, env: Env): Promise<Response> {
     case "keys.json":
       return ok(JSON.stringify(await keysJson(p, keys, origin), null, 2) + "\n", "application/json; charset=utf-8");
     case "install.sh":
-      return ok(renderInstall({ username: p.username, signer: p.signer }, env.PUBLIC_URL), "text/x-shellscript; charset=utf-8");
+      return ok(renderInstall({ username: p.username, signer: p.signer }, base), "text/x-shellscript; charset=utf-8");
   }
 
   // /<u>/<name> or /<u>/<name>.pub → that one key from the signed authorized_keys body, with its neutral name as the

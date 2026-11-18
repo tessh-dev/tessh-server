@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { handleAdmin } from "../src/admin.ts";
 import { Database } from "../src/db.ts";
 import { handle, type Env } from "../src/index.ts";
+import { loadSettings } from "../src/settings.ts";
 import { migrate, readMigrations } from "../src/migrate.ts";
 
 export const MIGRATIONS = readMigrations(join(import.meta.dirname, "..", "migrations"));
@@ -16,8 +17,9 @@ export function freshDB(): Database {
 }
 
 export function makeEnv(over: Partial<Env> = {}): Env {
+  const db = over.DB ?? freshDB();
   return {
-    DB: freshDB(),
+    DB: db,
     PRELOGIN_SECRET: "test-prelogin-secret",
     // Test-only AES key (32 bytes of 0x2a).
     TOTP_KEY: "KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=",
@@ -26,6 +28,8 @@ export function makeEnv(over: Partial<Env> = {}): Env {
     SIGNUPS: "open",
     VERSION: "0.0.0-test",
     ADMIN_PASSWORD,
+    SETTINGS: { ...loadSettings(db, {}), setupDone: true },
+    INSTANCE_ID: "0123456789abcdef",
     ...over,
   };
 }

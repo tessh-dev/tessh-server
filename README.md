@@ -115,12 +115,9 @@ All configuration is through environment variables.
 
 | Variable | Default | Description |
 |---|---|---|
-| `PUBLIC_URL` | (required) | The public origin of the server, e.g. `https://sync.example.com`. No path. Key page links and install commands use it. |
+| `PUBLIC_URL` | (optional) | The public origin of the server, e.g. `https://sync.example.com`. No path. Key page links and install commands use it; when unset they use the address each request came in on. A value here cannot be changed from the web panel. |
 | `PORT` | `8080` | Port for the API and key pages. |
 | `BIND` | `0.0.0.0` | Address the API listens on. |
-| `ADMIN_PORT` | `8081` | Port for the admin panel. |
-| `ADMIN_BIND` | `0.0.0.0` | Address the admin panel listens on. Inside Docker keep `0.0.0.0` and restrict the published port instead (the compose file uses `127.0.0.1:8081`). |
-| `ADMIN_PASSWORD` | (unset) | Password for the admin panel. **If unset, the admin panel is not started**; the API still runs. |
 | `SIGNUPS` | `invite` | `open`: anyone can create an account. `invite`: only emails on the invite list. `closed`: no new accounts. |
 | `SERVER_NAME` | `Tessh` | Name shown on the home page and reported to the apps. |
 | `DATA_DIR` | `/data` | Where the database (`tessh.db`) and `secrets.json` live. |
