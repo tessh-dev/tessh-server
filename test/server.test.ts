@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { start, type App } from "../src/app.ts";
+import { clientAddress, serve } from "../src/server.ts";
+import { clientIP } from "../src/http.ts";
 import { saveSetting } from "../src/settings.ts";
 
 let app: App;
@@ -81,5 +83,35 @@ describe("without PUBLIC_URL", () => {
       await a.close();
       rmSync(d, { recursive: true, force: true });
     }
+  });
+});
+
+describe("client address", () => {
+  it("ignores an x-tessh-client-ip header from the client", async () => {
+    const s = serve(async (req) => new Response(clientIP(req)));
+    await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+    try {
+      const url = `http://127.0.0.1:${(s.address() as AddressInfo).port}/`;
+      // The socket is loopback, so the proxy's view (last X-Forwarded-For entry) is used; the spoofed header never is.
+      const res = await fetch(url, { headers: { "x-tessh-client-ip": "6.6.6.6", "x-forwarded-for": "7.7.7.7, 203.0.113.9" } });
+      expect(await res.text()).toBe("203.0.113.9");
+      expect(await (await fetch(url, { headers: { "x-tessh-client-ip": "6.6.6.6" } })).text()).toBe("127.0.0.1");
+    } finally {
+      s.close();
+      s.closeAllConnections();
+    }
+  });
+
+  it("uses the last forwarded entry only when the socket is local or private", () => {
+    expect(clientAddress("127.0.0.1", "1.1.1.1, 2.2.2.2")).toBe("2.2.2.2");
+    expect(clientAddress("::1", "2.2.2.2")).toBe("2.2.2.2");
+    expect(clientAddress("::ffff:10.1.2.3", "2.2.2.2")).toBe("2.2.2.2");
+    expect(clientAddress("172.20.0.5", "2.2.2.2")).toBe("2.2.2.2");
+    expect(clientAddress("192.168.1.9", "2.2.2.2")).toBe("2.2.2.2");
+    expect(clientAddress("fd12::1", "2.2.2.2")).toBe("2.2.2.2");
+    expect(clientAddress("127.0.0.1", undefined)).toBe("127.0.0.1");
+    expect(clientAddress("203.0.113.5", "2.2.2.2")).toBe("203.0.113.5");
+    expect(clientAddress("172.32.0.1", "2.2.2.2")).toBe("172.32.0.1");
+    expect(clientAddress(undefined, "2.2.2.2")).toBe("unknown");
   });
 });

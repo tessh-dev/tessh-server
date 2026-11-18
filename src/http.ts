@@ -75,3 +75,9 @@ export async function readJSON<T>(req: Request): Promise<T> {
     throw new HttpError("invalid_request", 400, "Invalid JSON");
   }
 }
+
+/** Set by the HTTP server from the connection, never taken from the client. */
+export const CLIENT_IP_HEADER = "x-tessh-client-ip";
+
+/** The address the request really came from, or "unknown" outside the HTTP server. */
+export const clientIP = (req: Request): string => req.headers.get(CLIENT_IP_HEADER) || "unknown";

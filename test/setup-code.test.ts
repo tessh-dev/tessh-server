@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { HttpError } from "../src/http.ts";
 import { handle } from "../src/index.ts";
-import { checkSetupCode, issueSetupCode, resetSetupAttempts, setupLogLines } from "../src/setup-code.ts";
+import { checkSetupCode, issueSetupCode, resetSetupAttempts, setupLogLines, trackedAttempts } from "../src/setup-code.ts";
 import { makeEnv } from "./harness.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -53,6 +53,25 @@ describe("setup code", () => {
     expect(failure(() => checkSetupCode(env, code, "1.1.1.1")).status).toBe(429);
     expect(failure(() => checkSetupCode(env, "AAAA-AAAA", "2.2.2.2")).status).toBe(401);
     expect(() => checkSetupCode(env, code, "2.2.2.2")).not.toThrow();
+  });
+
+  it("locks everyone out after 50 wrong tries across IPs", () => {
+    const env = unsetEnv();
+    const code = issueSetupCode(env, 0);
+    for (let i = 0; i < 50; i++) expect(failure(() => checkSetupCode(env, "AAAA-AAAA", `10.0.${i}.1`, 1000)).status).toBe(401);
+    const e = failure(() => checkSetupCode(env, "AAAA-AAAA", "9.9.9.9", 1000));
+    expect([e.status, e.code]).toEqual([429, "too_many_attempts"]);
+    expect(failure(() => checkSetupCode(env, code, "8.8.8.8", 1000)).status).toBe(429);
+    expect(() => checkSetupCode(env, code, "8.8.8.8", 1000 + 15 * 60 * 1000 + 1)).not.toThrow();
+  });
+
+  it("prunes expired entries and stays bounded", () => {
+    const env = unsetEnv();
+    issueSetupCode(env, 0);
+    for (let i = 0; i < 4; i++) failure(() => checkSetupCode(env, "AAAA-AAAA", `ip-${i}`, 0));
+    expect(trackedAttempts()).toBe(4);
+    failure(() => checkSetupCode(env, "AAAA-AAAA", "later", 15 * 60 * 1000 + 1));
+    expect(trackedAttempts()).toBe(1);
   });
 
   it("lets an IP try again after 15 minutes", () => {

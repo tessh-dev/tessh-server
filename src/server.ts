@@ -1,5 +1,7 @@
 // node:http glue: IncomingMessage -> Request, a `(Request) => Promise<Response>` handler, Response -> ServerResponse.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { isIPv4 } from "node:net";
+import { CLIENT_IP_HEADER } from "./http.ts";
 
 export type Handler = (req: Request) => Promise<Response>;
 
@@ -13,6 +15,10 @@ function first(v: string | string[] | undefined): string | undefined {
   return s?.split(",")[0]?.trim() || undefined;
 }
 
+function forwardedChain(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v.join(",") : v;
+}
+
 /** The URL the client used. Behind a reverse proxy, X-Forwarded-Proto and X-Forwarded-Host say what that was. */
 export function requestURL(req: IncomingMessage): string {
   const proto = first(req.headers["x-forwarded-proto"]) === "https" ? "https" : "http";
@@ -20,6 +26,24 @@ export function requestURL(req: IncomingMessage): string {
   const safeHost = /^[A-Za-z0-9.:[\]-]+$/.test(host) ? host : "localhost";
   const path = req.url?.startsWith("/") ? req.url : "/";
   return `${proto}://${safeHost}${path}`;
+}
+
+/** Loopback and private addresses: a reverse proxy on this machine or network, whose X-Forwarded-For can be trusted. */
+export function isPrivateAddress(addr: string): boolean {
+  const a = addr.toLowerCase().replace(/^::ffff:/, "");
+  if (isIPv4(a)) {
+    const [p, q] = a.split(".").map(Number) as [number, number];
+    return p === 127 || p === 10 || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168);
+  }
+  return a === "::1" || /^f[cd][0-9a-f]{2}:/.test(a);
+}
+
+/** The client's address: the socket's, unless that is a local proxy, then the last X-Forwarded-For entry (the one the proxy saw). */
+export function clientAddress(remote: string | undefined, forwardedFor: string | undefined): string {
+  const socket = remote ?? "unknown";
+  if (!remote || !isPrivateAddress(remote)) return socket;
+  const last = forwardedFor?.split(",").pop()?.trim();
+  return last || socket;
 }
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -42,6 +66,8 @@ export async function toRequest(req: IncomingMessage): Promise<Request> {
     if (Array.isArray(v)) for (const x of v) headers.append(k, x);
     else headers.set(k, v);
   }
+  headers.delete(CLIENT_IP_HEADER);
+  headers.set(CLIENT_IP_HEADER, clientAddress(req.socket.remoteAddress, forwardedChain(req.headers["x-forwarded-for"])));
   const method = req.method ?? "GET";
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await readBody(req) : undefined;
