@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HttpError } from "../src/http.ts";
 import { handle } from "../src/index.ts";
+import { ConfigError } from "../src/config.ts";
 import { loadSettings, originFor, saveSetting } from "../src/settings.ts";
 import { freshDB, makeEnv } from "./harness.ts";
 
@@ -45,6 +46,46 @@ describe("settings", () => {
       expect(e).toBeInstanceOf(HttpError);
       expect(e).toMatchObject({ code: "locked_by_env", status: 409 });
     }
+  });
+
+  it("saving a locked public_url or signups is refused", () => {
+    const db = freshDB();
+    const env = makeEnv({ DB: db, SETTINGS: loadSettings(db, { PUBLIC_URL: "https://a.example", SIGNUPS: "open" }) });
+    for (const [k, v] of [["public_url", "https://b.example"], ["signups", "closed"]] as const) {
+      expect(() => saveSetting(env, k, v)).toThrow(expect.objectContaining({ code: "locked_by_env", status: 409 }));
+    }
+  });
+
+  it("a bad value is a 400 and changes neither the database nor the env", () => {
+    const db = freshDB();
+    const env = makeEnv({ DB: db, SETTINGS: loadSettings(db, {}), PUBLIC_URL: "https://keys.test", SIGNUPS: "open", SERVER_NAME: "Test server" });
+    const bad: [Parameters<typeof saveSetting>[1], string][] = [
+      ["signups", "maybe"], ["public_url", "not a url"], ["public_url", "https://a.example/path"],
+      ["default_bytes", "0"], ["default_bytes", "-5"], ["default_bytes", "1.5"], ["default_bytes", "abc"],
+      ["name", "   "], ["name", "x".repeat(65)], ["setup_done", "yes"], ["owner_user_id", ""],
+    ];
+    for (const [k, v] of bad) {
+      expect(() => saveSetting(env, k, v), `${k}=${v}`).toThrow(expect.objectContaining({ code: "invalid_request", status: 400 }));
+    }
+    expect(db.prepare("SELECT COUNT(*) AS n FROM settings").firstSync<{ n: number }>()?.n).toBe(0);
+    expect([env.PUBLIC_URL, env.SIGNUPS, env.SERVER_NAME]).toEqual(["https://keys.test", "open", "Test server"]);
+    expect(env.SETTINGS).toEqual(loadSettings(db, {}));
+  });
+
+  it("stores the normalised value", () => {
+    const db = freshDB();
+    const env = makeEnv({ DB: db, SETTINGS: loadSettings(db, {}) });
+    saveSetting(env, "public_url", "https://sync.example.com/");
+    saveSetting(env, "name", "  Home  ");
+    expect(env.PUBLIC_URL).toBe("https://sync.example.com");
+    expect(env.SERVER_NAME).toBe("Home");
+    expect(loadSettings(db, {})).toMatchObject({ publicURL: "https://sync.example.com", name: "Home" });
+    expect(db.prepare("SELECT value FROM settings WHERE key = 'public_url'").firstSync<{ value: string }>()?.value).toBe("https://sync.example.com");
+  });
+
+  it("loadSettings refuses a bad environment value", () => {
+    expect(() => loadSettings(freshDB(), { SIGNUPS: "bogus" })).toThrow(ConfigError);
+    expect(() => loadSettings(freshDB(), { PUBLIC_URL: "nope" })).toThrow(ConfigError);
   });
 
   it("saving updates the database and the live env", () => {

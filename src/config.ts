@@ -7,8 +7,6 @@ import { join } from "node:path";
 export type Signups = "open" | "invite" | "closed";
 
 export interface Config {
-  /** From PUBLIC_URL when it is set. Otherwise the origin of each request is used. */
-  publicURL: string | null;
   port: number;
   bind: string;
   dataDir: string;
@@ -54,7 +52,6 @@ export function parseSignups(v: string | undefined): Signups {
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const dataDir = env.DATA_DIR || "/data";
   return {
-    publicURL: env.PUBLIC_URL ? normalisePublicURL(env.PUBLIC_URL) : null,
     port: port(env.PORT, "PORT", 8080),
     bind: env.BIND || "0.0.0.0",
     dataDir,

@@ -18,16 +18,13 @@ describe("config", () => {
   it("defaults", () => {
     const c = loadConfig({ PUBLIC_URL: "https://sync.example.com/" });
     expect(c).toMatchObject({
-      publicURL: "https://sync.example.com",
       port: 8080,
       dataDir: "/data",
       dbPath: "/data/tessh.db",
     });
   });
 
-  it("PUBLIC_URL is optional, and must be an origin when given", () => {
-    expect(loadConfig({}).publicURL).toBeNull();
-    expect(() => loadConfig({ PUBLIC_URL: "nope" })).toThrow(ConfigError);
+  it("PUBLIC_URL must be an origin", () => {
     expect(() => normalisePublicURL("sync.example.com")).toThrow(ConfigError);
     expect(() => normalisePublicURL("ftp://sync.example.com")).toThrow(ConfigError);
     expect(() => normalisePublicURL("https://example.com/tessh")).toThrow(ConfigError);

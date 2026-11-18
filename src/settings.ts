@@ -75,31 +75,68 @@ export function loadSettings(db: Database, processEnv: NodeJS.ProcessEnv): Setti
   };
 }
 
-/** Writes one setting to the database and the live `env`. A setting the environment fixes is refused. */
+const invalid = (msg: string) => new HttpError("invalid_request", 400, msg);
+
+/** The value to store for `key`, or a 400 when it is not acceptable. */
+function normalise(key: SettingKey, value: string): string {
+  switch (key) {
+    case "name": {
+      const v = value.trim();
+      if (v.length < 1 || v.length > 64) throw invalid("The name must be 1 to 64 characters");
+      return v;
+    }
+    case "public_url":
+      try {
+        return normalisePublicURL(value.trim());
+      } catch (e) {
+        throw invalid(e instanceof Error ? e.message : "Not a valid address");
+      }
+    case "signups":
+      try {
+        return parseSignups(value);
+      } catch {
+        throw invalid("Sign-ups must be open, invite or closed");
+      }
+    case "default_bytes": {
+      const n = Number(value);
+      if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(n) || (n !== -1 && n <= 0)) throw invalid("Storage must be -1 (no limit) or a positive number of bytes");
+      return String(n);
+    }
+    case "setup_done":
+      if (value !== "0" && value !== "1") throw invalid("setup_done must be 0 or 1");
+      return value;
+    case "owner_user_id":
+      if (!value) throw invalid("owner_user_id is required");
+      return value;
+  }
+}
+
+/** Writes one setting to the database and the live `env`. A setting the environment fixes is refused; a bad value is a 400. */
 export function saveSetting(env: Env, key: SettingKey, value: string): void {
   if (env.SETTINGS.locked[key as LockableKey]) throw new HttpError("locked_by_env", 409, "Set by the server's environment");
+  const v = normalise(key, value);
   env.DB.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .bind(key, value)
+    .bind(key, v)
     .execSync();
   const s = env.SETTINGS;
   switch (key) {
     case "name":
-      s.name = env.SERVER_NAME = value;
+      s.name = env.SERVER_NAME = v;
       break;
     case "public_url":
-      s.publicURL = env.PUBLIC_URL = value;
+      s.publicURL = env.PUBLIC_URL = v;
       break;
     case "signups":
-      s.signups = env.SIGNUPS = parseSignups(value);
+      s.signups = env.SIGNUPS = parseSignups(v);
       break;
     case "default_bytes":
-      s.defaultBytes = Number(value);
+      s.defaultBytes = Number(v);
       break;
     case "owner_user_id":
-      s.ownerUserId = value;
+      s.ownerUserId = v;
       break;
     case "setup_done":
-      s.setupDone = value === "1";
+      s.setupDone = v === "1";
       break;
   }
 }
