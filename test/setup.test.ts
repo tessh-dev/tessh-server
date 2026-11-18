@@ -107,7 +107,9 @@ describe("browser setup", () => {
     const codePage = await first.text();
     expect(codePage).toContain("Set up your server");
     expect(codePage).toContain(`<script src="/_/setup.js?v=${env.VERSION}" defer></script>`);
-    expect(codePage).not.toMatch(/\sstyle=/);
+    expect(codePage).not.toMatch(/<script(?![^>]*\ssrc=)|<style|\sstyle=/);
+    expect(codePage).toContain(`<script src="/_/one-time-code.js?v=${env.VERSION}" defer></script><script src="/_/setup.js`);
+    expect(codePage).toContain('data-otp data-length="8" data-charset="code" data-groups="4,4"');
 
     const unlocked = await unlock(b, code.toLowerCase());
     const setCookie = unlocked.headers.getSetCookie().find((c) => c.startsWith("tessh_setup="))!;
@@ -368,6 +370,6 @@ describe("an expired setup code", () => {
     const html = await new Browser(env).html();
     expect(html).toContain("This setup code has expired");
     expect(html).toContain("Restart the server");
-    expect(html).not.toContain('aria-label="Character 1 of 8"');
+    expect(html).not.toContain("data-otp");
   });
 });

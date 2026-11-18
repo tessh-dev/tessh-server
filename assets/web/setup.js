@@ -20,7 +20,12 @@
     });
     let data = {};
     try { data = await res.json(); } catch (e) { data = {}; }
-    if (!res.ok) throw new Error(data.message || 'Something went wrong. Try again.');
+    if (!res.ok) {
+      const x = new Error(data.message || 'Something went wrong. Try again.');
+      x.code = data.error;
+      x.status = res.status;
+      throw x;
+    }
     return data;
   }
 
@@ -52,41 +57,29 @@
     if (h) { h.tabIndex = -1; h.focus(); }
   }
 
-  // ---- Setup code ----
+  // ---- Setup code: checked as soon as all 8 characters are in ----
   function code() {
-    const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    const boxes = Array.from(form.querySelectorAll('.code input'));
-    const clean = (s) => s.toUpperCase().split('').filter((c) => ALPHABET.includes(c));
-    function fill(from, chars) {
-      let i = from;
-      for (const c of chars) {
-        if (i >= boxes.length) break;
-        boxes[i++].value = c;
-      }
-      boxes[Math.min(i, boxes.length - 1)].focus();
-    }
-    boxes.forEach((box, i) => {
-      box.addEventListener('input', () => {
-        const chars = clean(box.value);
-        box.value = '';
-        if (chars.length) fill(i, chars);
-      });
-      box.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !box.value && i > 0) { boxes[i - 1].value = ''; boxes[i - 1].focus(); e.preventDefault(); }
-        else if (e.key === 'ArrowLeft' && i > 0) boxes[i - 1].focus();
-        else if (e.key === 'ArrowRight' && i < boxes.length - 1) boxes[i + 1].focus();
-      });
-      box.addEventListener('paste', (e) => {
-        e.preventDefault();
-        fill(i, clean((e.clipboardData || window.clipboardData).getData('text')));
-      });
+    const field = window.TesshCode.mount(form.querySelector('[data-otp]'), {
+      text: { bad: 'That code didn’t work' },
+      async onComplete(value) {
+        showError('');
+        try {
+          await post('/setup/api/code', { code: value });
+          return true;
+        } catch (x) {
+          // A plain wrong code shakes; anything else (expired, too many tries) says what happened.
+          if (x.code === 'setup_code_wrong' && x.message === "That code isn't right.") return false;
+          return x.message;
+        }
+      },
+      onAccepted: () => setTimeout(next, 500),
     });
-    onSubmit(async () => {
-      const value = boxes.map((b) => b.value).join('');
-      if (value.length < boxes.length) throw new Error('Type all 8 characters of the setup code.');
-      await post('/setup/api/code', { code: value });
-      next();
+    // Enter (or a screen reader's submit) checks a complete code again.
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!field.check()) field.focus();
     });
+    field.focus();
   }
 
   // ---- Name and address ----
@@ -152,8 +145,43 @@
     const box = form.querySelector('[data-totp]');
     const secretEl = form.querySelector('[data-secret]');
     const uriEl = form.querySelector('[data-uri]');
-    const codeEl = form.querySelector('#totp');
     let enrolled = false;
+    let sending = false;
+
+    function details() {
+      return { email: form.querySelector('#email').value, password: password.value };
+    }
+    function finish() {
+      if (form.dataset.mode === 'owner') showDone();
+      else next();
+    }
+    // A complete code sends the whole step. Until the email and password are in, it just waits.
+    const field = window.TesshCode.mount(form.querySelector('[data-otp]'), {
+      text: { bad: 'That code didn’t work' },
+      async onComplete(value) {
+        const body = details();
+        if (sending) return null;
+        if (!body.email || !body.password) {
+          showError('Fill in your email and password, then press Continue.');
+          return null;
+        }
+        showError('');
+        sending = true;
+        submitBtn.disabled = true;
+        try {
+          await post('/setup/api/owner', Object.assign(body, { totpCode: value }));
+          return true;
+        } catch (x) {
+          if (x.code === 'invalid_code') return false;
+          showError(x.message);
+          return null;
+        } finally {
+          sending = false;
+          submitBtn.disabled = false;
+        }
+      },
+      onAccepted: () => setTimeout(finish, 500),
+    });
 
     password.addEventListener('input', () => {
       const p = password.value;
@@ -187,15 +215,17 @@
     form.querySelector('#email').focus();
 
     onSubmit(async () => {
-      const body = { email: form.querySelector('#email').value, password: password.value };
       if (toggle.getAttribute('aria-checked') === 'true') {
-        const c = codeEl.value.replace(/\s/g, '');
-        if (!c) throw new Error('Type the code from your authenticator app, or turn the authenticator off.');
-        body.totpCode = c;
+        // The code field sends the step itself, with its check and tick.
+        if (field.value.length < 6) {
+          field.focus();
+          throw new Error('Type the code from your authenticator app, or turn the authenticator off.');
+        }
+        field.check();
+        return;
       }
-      await post('/setup/api/owner', body);
-      if (form.dataset.mode === 'owner') showDone();
-      else next();
+      await post('/setup/api/owner', details());
+      finish();
     });
   }
 

@@ -390,13 +390,13 @@ ${sessionRows}
 <dialog class="dlg" data-dialog="totp-on" aria-labelledby="totp-on-title"><form method="dialog" data-api="/admin/api/owner/totp/confirm" data-totp-start novalidate>
 <h4 id="totp-on-title">Turn on the authenticator</h4><p class="cap">Add this key to your authenticator app, then type the code it shows.</p>
 <p class="secret" data-secret>…</p><a class="mono uri" data-uri href="#">Open in your authenticator app</a>
-<div class="fg"><div class="fr"><label for="totp-code">Code</label><input class="m" id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"></div></div>
+<div class="otp-box" id="totp-code" data-otp data-name="code" data-label="Authenticator code"></div>
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Turn on</button></div>
 </form></dialog>
 <dialog class="dlg" data-dialog="backup" aria-labelledby="backup-title"><form method="dialog" data-download="/admin/api/backup" novalidate>
 <h4 id="backup-title">Download a backup</h4><p class="cap">The file holds everyone's account data. Confirm it's you.</p>
-<div class="fg">${pw("backup-pw", "Password", "current-password", ' name="password"')}${owner.totp ? `<div class="fr"><label for="backup-code">Code</label><input class="m" id="backup-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"></div>` : ""}</div>
+<div class="fg">${pw("backup-pw", "Password", "current-password", ' name="password"')}</div>${owner.totp ? `<div class="otp-box" id="backup-code" data-otp data-name="code" data-label="Authenticator code"></div>` : ""}
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Download</button></div>
 </form></dialog>
@@ -417,8 +417,8 @@ export function renderLogin(env: Env): string {
 <div class="fg">
 <div class="fr"><label for="email">Email</label><input id="email" name="email" type="email" required autocomplete="username" spellcheck="false" autofocus></div>
 <div class="fr"><label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>
-<div class="fr" data-code-row hidden><label for="code">Code</label><input class="m" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"></div>
 </div>
+<div class="otp-box" id="code" data-code-row data-otp data-name="code" data-label="Authenticator code" hidden></div>
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn primary grow" type="submit">Sign in</button></div>
 </form></main>`;

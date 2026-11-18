@@ -7,6 +7,7 @@ describe("web assets", () => {
   const cases: [string, string][] = [
     ["/_/tessh.css", "text/css"],
     ["/_/field.js", "text/javascript"],
+    ["/_/one-time-code.js", "text/javascript"],
     ["/_/setup.js", "text/javascript"],
     ["/_/panel.js", "text/javascript"],
     ["/_/AlloRound.woff2", "font/woff2"],
@@ -32,7 +33,7 @@ describe("page shell", () => {
   it("is CSP-compatible", () => {
     const html = page({ title: "A <b>", body: '<p class="x">hi</p>', script: "setup" });
     expect(html).toContain('<meta name="color-scheme" content="light dark">');
-    expect(html).toContain('<script src="/_/setup.js" defer></script>');
+    expect(html).toContain('<script src="/_/one-time-code.js" defer></script><script src="/_/setup.js" defer></script>');
     expect(html).toContain("A &lt;b&gt;");
     expect(html).not.toMatch(/<script(?![^>]*\ssrc=)/);
     expect(html).not.toMatch(/<style/);

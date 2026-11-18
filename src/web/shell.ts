@@ -22,7 +22,7 @@ export function page({ title, body, script, version }: PageOptions): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="robots" content="noindex,nofollow">
-<title>${esc(title)}</title><link rel="stylesheet" href="/_/tessh.css${v}"><script src="/_/field.js${v}" defer></script>${script ? `<script src="/_/${script}.js${v}" defer></script>` : ""}
+<title>${esc(title)}</title><link rel="stylesheet" href="/_/tessh.css${v}"><script src="/_/field.js${v}" defer></script>${script ? `<script src="/_/one-time-code.js${v}" defer></script><script src="/_/${script}.js${v}" defer></script>` : ""}
 </head><body>
 ${body}
 </body></html>

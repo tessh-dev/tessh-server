@@ -236,16 +236,12 @@ function expiredStep(mode: Mode): string {
 
 function codeStep(mode: Mode, env: Env): string {
   if (codeExpired(env)) return expiredStep(mode);
-  const box = (i: number) =>
-    `<input aria-label="Character ${i + 1} of 8" maxlength="1" autocomplete="off" autocapitalize="characters" spellcheck="false"${i === 0 ? " autofocus" : ""}>`;
-  const boxes = [0, 1, 2, 3].map(box).join("") + `<span class="dash" aria-hidden="true">–</span>` + [4, 5, 6, 7].map(box).join("");
   return `<form class="ocard" data-step="code" novalidate>${MARK}${dots(mode, "code")}
 <h3>Set up your server</h3>
 <p class="sub">Type the setup code from your server's logs. It's under “Not set up yet”.</p>
-<div class="code">${boxes}</div>
-<p class="cap">Lost it? Run <span class="mono">docker compose logs tessh-server</span> again.</p>
+<div class="otp-box" data-otp data-length="8" data-charset="code" data-groups="4,4" data-label="Setup code"></div>
 ${ERR}
-<div class="acts"><button class="btn primary grow" type="submit">Continue</button></div>
+<p class="cap">The code is in your server's log. On the machine you installed it on, run <span class="mono">docker compose logs tessh-server</span></p>
 </form>`;
 }
 
@@ -292,7 +288,7 @@ function ownerStep(env: Env, mode: Mode): string {
 <p class="cap">Add this key to your authenticator app, then type the code it shows.</p>
 <p class="secret" data-secret>…</p>
 <a class="mono uri" data-uri href="#">Open in your authenticator app</a>
-<div class="fr"><label for="totp">Code</label><input class="m" id="totp" name="totp" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"></div>
+<div class="otp-box" id="totp" data-otp data-label="Authenticator code"></div>
 </div>
 ${ERR}
 <div class="acts">${back(mode)}<button class="btn primary grow" type="submit">Continue</button></div>

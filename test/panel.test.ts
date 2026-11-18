@@ -65,6 +65,7 @@ describe("panel sign-in", () => {
     const html = await login.text();
     expect(html).toContain('name="email"');
     expect(html).toContain('name="password"');
+    expect(html).toContain('data-code-row data-otp data-name="code"');
     expect(html).not.toContain('href="/admin/team"');
   });
 
@@ -106,6 +107,7 @@ describe("panel pages", () => {
       const html = await res.text();
       expect(html).not.toMatch(/<script(?![^>]*\ssrc=)|<style|\sstyle=/);
       expect(html).toContain(`src="/_/panel.js?v=${env.VERSION}"`);
+      expect(html).toContain(`<script src="/_/one-time-code.js?v=${env.VERSION}" defer></script><script src="/_/panel.js`);
       expect(html).toContain(`href="/_/tessh.css?v=${env.VERSION}"`);
     }
     expect((await panel("GET", "/admin/nope")).status).toBe(404);

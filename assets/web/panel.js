@@ -174,6 +174,7 @@
       if (e.submitter && e.submitter.value === 'cancel') return;
       e.preventDefault();
       show('');
+      if (opts && opts.before && opts.before(show)) return;
       submit.disabled = true;
       try {
         const body = opts && opts.body ? opts.body(form) : formBody(form);
@@ -189,55 +190,113 @@
     return show;
   }
 
+  // ---- Authenticator codes ----
+  // A code field sends its form as soon as the code is complete; the submit button checks it again.
+  const WRONG = { bad: 'That code didn’t work' };
+  function codeField(box, send, done) {
+    return window.TesshCode.mount(box, {
+      text: WRONG,
+      async onComplete(code) {
+        try {
+          return await send(code);
+        } catch (x) {
+          // A wrong code shakes; anything else (too many tries, a wrong password) says what happened.
+          if (x.code === 'invalid_code') return false;
+          return x.message;
+        }
+      },
+      onAccepted: () => setTimeout(done, 450),
+    });
+  }
+  // For a submit button next to a code field: checks a complete code, or asks for one.
+  function checkCode(field, show) {
+    if (field.value.length === 6) {
+      if (!field.check()) field.focus();
+    } else {
+      show('Type the 6-digit code from your authenticator app.');
+      field.focus();
+    }
+    return true;
+  }
+
   // Sign-in: a second step for the authenticator code when the server asks for it.
   const login = $('form[data-login]');
   if (login) {
     const codeRow = $('[data-code-row]', login);
+    const field = codeField(
+      codeRow,
+      (code) => call('POST', login.dataset.api, Object.assign(formBody(login), { code })),
+      () => after(login.dataset.then),
+    );
     wireForm(login, {
+      before: (show) => (codeRow.hidden ? false : checkCode(field, show)),
       onError(x) {
         if (x.code !== 'code_required') return false;
         codeRow.hidden = false;
-        $('input', codeRow).focus();
+        field.focus();
         return true;
       },
     });
   }
 
-  // ---- Backup download: confirm with the password, then save the file the server sends ----
+  // ---- Backup download: confirm with the password (and code), then save the file the server sends ----
+  async function download(form) {
+    const res = await fetch(form.dataset.download, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json', 'x-tessh-owner': '1' },
+      body: JSON.stringify(formBody(form)),
+    });
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch (x) { data = {}; }
+      throw new ApiError(data.message || 'Something went wrong. Try again.', data.error);
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '');
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name ? name[1] : 'tessh-backup.db';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+  // Code fields inside dialogs, cleared each time their dialog opens.
+  const dialogFields = new Map();
   $$('form[data-download]').forEach((form) => {
     const err = $('.err', form);
     const submit = $('button[type=submit]', form);
+    const show = (m) => { err.textContent = m || ''; err.hidden = !m; };
+    const saved = () => { form.closest('dialog').close(); say('Backup downloaded'); };
+    const box = $('[data-otp]', form);
+    const field = box && codeField(box, async () => {
+      show('');
+      if (!$('input[name=password]', form).value) {
+        show('Type your password, then press Download.');
+        return null;
+      }
+      try {
+        await download(form);
+        return true;
+      } catch (x) {
+        if (x.code === 'invalid_code') throw x;
+        show(x.message);
+        return null;
+      }
+    }, saved);
+    if (field) dialogFields.set(form.closest('dialog'), field);
     form.addEventListener('submit', async (e) => {
       if (e.submitter && e.submitter.value === 'cancel') return;
       e.preventDefault();
-      err.hidden = true;
+      show('');
+      if (field) { checkCode(field, show); return; }
       submit.disabled = true;
       try {
-        const res = await fetch(form.dataset.download, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json', 'x-tessh-owner': '1' },
-          body: JSON.stringify(formBody(form)),
-        });
-        if (!res.ok) {
-          let data = {};
-          try { data = await res.json(); } catch (x) { data = {}; }
-          throw new Error(data.message || 'Something went wrong. Try again.');
-        }
-        const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '');
-        const url = URL.createObjectURL(await res.blob());
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name ? name[1] : 'tessh-backup.db';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-        form.closest('dialog').close();
-        say('Backup downloaded');
+        await download(form);
+        saved();
       } catch (x) {
-        err.textContent = x.message;
-        err.hidden = false;
+        show(x.message);
       } finally {
         submit.disabled = false;
       }
@@ -250,10 +309,17 @@
     if (!d) return null;
     $$('.err', d).forEach((x) => { x.hidden = true; });
     $$('input', d).forEach((x) => { x.value = ''; });
+    if (dialogFields.has(d)) dialogFields.get(d).reset();
     d.showModal();
     return d;
   }
-  $$('dialog form[data-api]').forEach((f) => wireForm(f));
+  $$('dialog form[data-api]').forEach((f) => {
+    const box = $('[data-otp]', f);
+    if (!box) { wireForm(f); return; }
+    const field = codeField(box, (code) => call('POST', f.dataset.api, Object.assign(formBody(f), { code })), () => after(f.dataset.then));
+    dialogFields.set(f.closest('dialog'), field);
+    wireForm(f, { before: (show) => checkCode(field, show) });
+  });
   $$('[data-open]').forEach((b) => {
     b.addEventListener('click', async () => {
       const d = openDialog(b.dataset.open);
@@ -268,7 +334,7 @@
         const r = await call('POST', '/admin/api/owner/totp/start');
         secret.textContent = r.secret.replace(/(.{4})/g, '$1 ').trim();
         uri.href = r.uri;
-        $('input[name=code]', d).focus();
+        dialogFields.get(d).focus();
       } catch (x) {
         const err = $('.err', d);
         err.textContent = x.message;

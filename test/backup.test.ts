@@ -142,7 +142,7 @@ describe("backup download", () => {
       const need = await post({ password: PW });
       expect([need.status, ((await need.json()) as any).error]).toEqual([401, "code_required"]);
       expect((await post({ password: PW, code: "000000" })).status).toBe(401);
-      expect(await page("/admin/settings")).toContain('id="backup-code"');
+      expect(await page("/admin/settings")).toContain('id="backup-code" data-otp data-name="code"');
       const ok = await post({ password: PW, code: await totpAt(secret, stepAt(Date.now())) });
       expect(ok.status).toBe(200);
       expect(audits()).toHaveLength(before + 1);
