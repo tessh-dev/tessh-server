@@ -20,6 +20,23 @@ export const totpEnrol = (): string => `<p class="cap">Scan this with your authe
 <p><a class="uri" data-uri href="#">Open in your authenticator app</a></p></div>
 </details>`;
 
+/**
+ * Connecting the owner's own apps, in the panel and on the setup done page: an Open in Tessh button, a QR for
+ * the iPhone and the address and code to type. With `connect` null (setup) the page's script fills the
+ * `data-owner-*` placeholders from the finish response.
+ */
+export function connectBlock(host: string, connect: { code: string; link: string; qr: string } | null, copy = ""): string {
+  const c = connect;
+  return `<div class="cn-block">
+<p class="soft">Your apps need their own Tessh account. This page's password is only for this admin page.</p>
+<div class="stack"><a class="btn primary" data-owner-link href="${esc(c?.link ?? "#")}">Open in Tessh</a></div>
+<div class="qr" data-owner-qr>${c?.qr ?? ""}</div>
+<p class="cap qr-cap">Scan with iPhone</p>
+<div class="lbl">Or type in the app</div>
+<div class="cmd"><code class="key"><span class="mono">${esc(host)}</span> · <span data-owner-code>${esc(c?.code ?? "")}</span></code>${copy}</div>
+</div>`;
+}
+
 /** The Tessh Server wordmark at the top of a setup or sign-in card. */
 export const MARK = `<div class="mark"><span class="gly" aria-hidden="true"><span class="t">t</span><span class="c">›</span><span class="b"></span></span> Tessh Server</div>`;
 

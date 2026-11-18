@@ -7,7 +7,7 @@ import type { OwnerSessionInfo } from "../owner.ts";
 import { icons } from "./icons.ts";
 import { updateStatus, type Release, type UpdateStatus } from "../updates.ts";
 import type { ActivityEvent, Overview, Person } from "./panel.ts";
-import { MARK, esc, page, totpEnrol } from "./shell.ts";
+import { MARK, connectBlock, esc, page, totpEnrol } from "./shell.ts";
 
 export interface PanelContext {
   env: Env;
@@ -262,25 +262,31 @@ function deviceRow(ctx: PanelContext, p: Person, d: Person["devices"][number], m
   })}</span></div>`;
 }
 
-/** Before the owner has an account: how to sign in from the apps, with their code behind Show my code. */
-function connectCard(ctx: PanelContext, code: string | null): string {
+/** Before the owner has an account: connect the apps with a link, a QR and the code in plain text. */
+function connectCard(ctx: PanelContext, connect: OwnerConnect | null): string {
   const host = ctx.env.SETTINGS.publicURL ? new URL(ctx.env.SETTINGS.publicURL).host : ctx.host;
-  const reveal = code
-    ? `<button type="button" class="btn primary sm" data-reveal="owner-code" aria-expanded="false" aria-controls="owner-code">Show my code</button>
-<div class="cmd code-out" id="owner-code" hidden><code class="key">${esc(code)}</code>${copyButton(code)}</div>`
+  const inner = connect
+    ? connectBlock(host, connect, copyButton(connect.code))
     : `<p class="soft">Your code has been used or cancelled.</p>`;
   return `<div class="rows connect"><div class="cn">
 <span class="ri">${icons.laptop}</span>
-<div class="t"><b>Sign in from your apps</b><p>In the Tessh app, choose <b>Self-hosted</b> · <span class="mono">${esc(host)}</span> · your code.</p>
-${reveal}</div></div></div>`;
+<div class="t"><b>Connect your apps</b>
+${inner}</div></div></div>`;
+}
+
+/** The waiting owner code with its join link and the link's QR (an inline SVG). */
+export interface OwnerConnect {
+  code: string;
+  link: string;
+  qr: string;
 }
 
 export interface OverviewExtras {
   people: Person[];
   /** The owner's own account, or null until they sign up in an app. */
   owner: Person | null;
-  /** The waiting owner code, when the owner has no account yet. */
-  ownerCode: string | null;
+  /** The waiting owner code with its link and QR, when the owner has no account yet. */
+  ownerConnect: OwnerConnect | null;
   health: Health;
 }
 
@@ -306,7 +312,7 @@ function heroTile(ctx: PanelContext, o: Overview, x: OverviewExtras): string {
 export function renderOverview(ctx: PanelContext, o: Overview, x: OverviewExtras): string {
   let middle: string;
   if (isSolo(ctx.env)) {
-    if (!x.owner) middle = `${cap("Your devices")}${connectCard(ctx, x.ownerCode)}`;
+    if (!x.owner) middle = `${cap("Your devices")}${connectCard(ctx, x.ownerConnect)}`;
     else {
       const rows = x.owner.devices.length
         ? x.owner.devices
@@ -335,7 +341,7 @@ export function renderOverview(ctx: PanelContext, o: Overview, x: OverviewExtras
           )
           .join("")
       : `<div class="row calm"><span class="ri">${icons.people}</span><div class="t"><b>No one has joined yet</b><small>Make an invite and send them the link.</small></div><span class="r"><a class="btn ghost sm" href="/admin/invites">Invites</a></span></div>`;
-    middle = `${x.owner ? "" : `${cap("Your own apps")}${connectCard(ctx, x.ownerCode)}`}${cap("Team", ["/admin/team", "All"])}<div class="rows">${rows}</div>`;
+    middle = `${x.owner ? "" : `${cap("Your own apps")}${connectCard(ctx, x.ownerConnect)}`}${cap("Team", ["/admin/team", "All"])}<div class="rows">${rows}</div>`;
   }
   const u = updateStatus(ctx.env);
   const inner = `${u.kind === "update" ? updateCard(ctx, u.release) : ""}${heroTile(ctx, o, x)}
@@ -345,9 +351,9 @@ ${eventRows(o.recent, ctx.now)}`;
   return layout(ctx, "overview", { title: "Overview", sub: whoLine(ctx, o.people) }, inner);
 }
 
-export function renderDevices(ctx: PanelContext, owner: Person | null, code: string | null): string {
+export function renderDevices(ctx: PanelContext, owner: Person | null, connect: OwnerConnect | null): string {
   const people = ctx.counts.people;
-  if (!owner) return layout(ctx, "devices", { title: "Devices", sub: whoLine(ctx, people) }, connectCard(ctx, code));
+  if (!owner) return layout(ctx, "devices", { title: "Devices", sub: whoLine(ctx, people) }, connectCard(ctx, connect));
   const rows = owner.devices.length
     ? owner.devices.map((d) => deviceRow(ctx, owner, d, true)).join("")
     : `<div class="row calm"><span class="ri">${icons.laptop}</span><div class="t"><b>No devices signed in</b><small>Sign in from the Tessh app with ${esc(owner.email)}.</small></div></div>`;
@@ -618,6 +624,7 @@ export function renderLogin(env: Env): string {
 <form class="ocard" data-api="/admin/login" data-then="/admin" data-login novalidate>${MARK}
 <h3>Sign in</h3>
 <p class="sub">The panel for ${esc(env.SETTINGS.name)}.</p>
+<p class="sub">This is your admin login. It's separate from your Tessh account in the apps.</p>
 <div class="fg">
 <div class="fr"><label for="email">Email</label><input id="email" name="email" type="email" required autocomplete="username" spellcheck="false" autofocus></div>
 <div class="fr"><label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>

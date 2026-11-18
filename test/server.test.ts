@@ -8,6 +8,7 @@ import { start, type App } from "../src/app.ts";
 import { clientAddress, serve } from "../src/server.ts";
 import { clientIP } from "../src/http.ts";
 import { saveSetting } from "../src/settings.ts";
+import { createInvite } from "../src/invites.ts";
 
 let app: App;
 let dir: string;
@@ -41,6 +42,32 @@ describe("node:http server", () => {
     const s = (await (await fetch(`${api}/v1/server`)).json()) as Record<string, string>;
     expect(s).toMatchObject({ name: "Tessh", signups: "closed", keysURL: "https://sync.example.com" });
     expect(s.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("server info says whether the owner still has to make a Tessh account", async () => {
+    const info = async () => (await (await fetch(`${api}/v1/server`)).json()) as { ownerPending: boolean };
+    expect((await info()).ownerPending).toBe(true);
+    const { code } = createInvite(app.env, { label: "Owner", days: null, kind: "owner", origin: "https://sync.example.com" });
+    const authKey = Buffer.alloc(32, 1).toString("base64");
+    const r = await fetch(`${api}/v1/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "owner@example.com",
+        authKey,
+        salt: Buffer.alloc(16, 2).toString("base64"),
+        kdf: { alg: "argon2id", opslimit: 3, memlimit: 67108864 },
+        wrappedVaultKey: Buffer.alloc(60, 3).toString("base64"),
+        encryptedSigningKey: Buffer.alloc(60, 4).toString("base64"),
+        signerPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGFrZQ",
+        recoveryAuthKey: Buffer.alloc(32, 11).toString("base64"),
+        wrappedVaultKeyRecovery: Buffer.alloc(60, 12).toString("base64"),
+        invite: code,
+        device: { name: "Mac", platform: "macos" },
+      }),
+    });
+    expect(r.status, await r.clone().text()).toBeLessThan(300);
+    expect((await info()).ownerPending).toBe(false);
   });
 
   it("HEAD has headers and no body", async () => {

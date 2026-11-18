@@ -11,7 +11,7 @@ describe("routing on one public URL", () => {
   it("serves the server info for the apps' custom server check", async () => {
     const res = await SELF.fetch("https://keys.test/v1/server");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ name: "Test server", version: "0.0.0-test", signups: "open", keysURL: "https://keys.test", setUp: true, instance: "0123456789abcdef" });
+    expect(await res.json()).toEqual({ name: "Test server", version: "0.0.0-test", signups: "open", keysURL: "https://keys.test", setUp: true, ownerPending: true, instance: "0123456789abcdef" });
   });
 
   it("routes by path, whatever the Host", async () => {

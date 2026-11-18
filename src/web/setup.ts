@@ -5,14 +5,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { normalisePublicURL, parseSignups } from "../config.ts";
 import { HttpError, clientIP, error, json, readJSON } from "../http.ts";
 import type { Env } from "../index.ts";
-import { createInvite } from "../invites.ts";
+import { createInvite, ownerJoinLink } from "../invites.ts";
 import { checkWrite, confirmTotp, createOwner, createOwnerSession, totpURI } from "../owner.ts";
 import { checkSetupCode } from "../setup-code.ts";
 import { originFor, saveSetting } from "../settings.ts";
 import { qrSVG } from "../qr.ts";
 import { base32Encode, matchStep, timingSafeEqual } from "../totp.ts";
 import { icons } from "./icons.ts";
-import { MARK, esc, page, totpEnrol } from "./shell.ts";
+import { MARK, connectBlock, esc, page, totpEnrol } from "./shell.ts";
 
 const COOKIE = "tessh_setup";
 const SESSION_MS = 2 * 60 * 60 * 1000;
@@ -210,12 +210,13 @@ async function postTeam(req: Request, env: Env): Promise<Response> {
   const origin = originFor(req, env);
   const invites = labels.map((label) => ({ label, url: createInvite(env, { label, days: 7, kind: "member", origin }).url }));
   const ownerCode = createInvite(env, { label: "Owner", days: null, kind: "owner", origin }).code;
+  const ownerLink = ownerJoinLink(env, origin, ownerCode);
   saveSetting(env, "setup_done", "1");
   env.SETUP = null;
   env.SETUP_SESSION = null;
 
   const owner = await createOwnerSession(env, req);
-  return json({ invites, ownerCode }, 200, [
+  return json({ invites, ownerCode, ownerLink, ownerQR: qrSVG(ownerLink) }, 200, [
     ["set-cookie", cookieValue(req, "", 0)],
     ["set-cookie", owner],
   ]);
@@ -359,7 +360,7 @@ ${ERR}
 <div class="rows for-team" data-invites hidden></div>
 <div class="lbl for-team">Your own apps</div>
 <div class="lbl for-solo">Connect your apps</div>
-<div class="rows"><div class="row"><span class="ri">${icons.server}</span><div class="t"><b>In Tessh, choose Self-hosted</b><small>${esc(host)} · your code <span data-owner-code></span></small></div></div></div>
+${connectBlock(host, null)}
 <div class="acts"><a class="btn primary grow" href="/admin">Open the panel</a></div>
 </section>
 <template data-invite-row><div class="row"><span class="who"></span><div class="t"><b></b><small></small></div><span class="r"><button type="button" class="btn ghost sm" data-copy>${icons.copy}<span>Copy</span></button></span></div></template>`;

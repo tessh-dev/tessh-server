@@ -181,25 +181,35 @@ describe("panel layout by mode", () => {
     }
   });
 
-  it("Overview: before the owner has an account, Sign in from your apps with Show my code", async () => {
+  it("Overview: before the owner has an account, Connect your apps with the code in plain text", async () => {
     const owner = createInvite(env, { label: "Owner", days: null, kind: "owner", origin: BASE });
     try {
       for (const html of [await (await panel("GET", "/admin")).text(), await asSolo(async () => (await panel("GET", "/admin")).text())]) {
-        expect(html).toContain("Sign in from your apps");
-        expect(html).toContain("<b>Self-hosted</b> · <span class=\"mono\">keys.test</span> · your code");
-        expect(html).toContain('data-reveal="owner-code" aria-expanded="false" aria-controls="owner-code">Show my code</button>');
-        expect(html).toMatch(new RegExp(`<div class="cmd code-out" id="owner-code" hidden><code class="key">${owner.code}</code><button[^>]* data-copy="${owner.code}"`));
+        expect(html).toContain("Connect your apps");
+        expect(html).toContain("This page's password is only for this admin page.");
+        expect(html).toContain("Open in Tessh");
+        expect(html).toContain("Scan with iPhone");
+        expect(html).toContain("Or type in the app");
+        expect(html).toMatch(/href="tessh:\/\/join\?server=[^"]*&amp;code=[^"]*&amp;email=owner%40example\.com"/);
+        expect(html).toContain("<svg");
+        expect(html).toContain(`<span data-owner-code>${owner.code}</span>`);
+        expect(html).not.toContain("Show my code");
         expect(html).toContain('<section class="hero"');
         expect(html).not.toContain('class="stat"');
       }
-      expect(await asSolo(async () => (await panel("GET", "/admin/devices")).text())).toContain("Show my code");
+      expect(await asSolo(async () => (await panel("GET", "/admin/devices")).text())).toContain("Connect your apps");
     } finally {
       cancelInvite(env, owner.code);
     }
-    // With the code gone and still no account, there is nothing to reveal.
+    // With the code gone and still no account, there is nothing to show.
     const gone = await asSolo(async () => (await panel("GET", "/admin")).text());
     expect(gone).toContain("Your code has been used or cancelled.");
-    expect(gone).not.toContain("Show my code");
+    expect(gone).not.toContain("Open in Tessh");
+  });
+
+  it("Login page says the admin login is separate from the Tessh account", async () => {
+    const html = await (await panel("GET", "/admin/login", undefined, { cookie: null })).text();
+    expect(html).toContain("This is your admin login. It's separate from your Tessh account in the apps.");
   });
 
   it("Overview and Devices show the owner's own devices once they have an account", async () => {
@@ -212,7 +222,8 @@ describe("panel layout by mode", () => {
       expect(overview).toContain('href="/admin/devices">Manage</a>');
       expect(overview).toContain("My iPhone");
       expect(overview).toContain("2 devices");
-      expect(overview).not.toContain("Show my code");
+      expect(overview).not.toContain("Connect your apps");
+      expect(overview).not.toContain("tessh://join?");
       const devices = await asSolo(async () => (await panel("GET", "/admin/devices")).text());
       expect(devices).toContain("Signed in as mine@x.com");
       expect(devices).toContain("Test Mac");

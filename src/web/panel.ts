@@ -26,6 +26,8 @@ import {
   signOut,
   startTotp,
 } from "../owner.ts";
+import { ownerJoinLink } from "../invites.ts";
+import { qrSVG } from "../qr.ts";
 import { ADDRESS_HINT, originFor, saveSetting, type SettingKey } from "../settings.ts";
 import { updateStatus } from "../updates.ts";
 import {
@@ -36,6 +38,7 @@ import {
   renderInvites,
   renderMaintenance,
   renderLogin,
+  type OwnerConnect,
   renderNotFound,
   renderOverview,
   renderSettings,
@@ -562,14 +565,16 @@ async function ownerAccount(env: Env, host: string): Promise<Person | null> {
 }
 
 /** The owner code setup made, while it is still waiting to be used. */
-async function ownerCode(env: Env): Promise<string | null> {
+async function ownerCode(env: Env, origin: string): Promise<OwnerConnect | null> {
   const r = await env.DB.prepare(
     `SELECT code FROM invites WHERE kind = 'owner' AND used_at IS NULL AND cancelled_at IS NULL AND (expires_at IS NULL OR expires_at > ?)
      ORDER BY created_at DESC LIMIT 1`,
   )
     .bind(new Date().toISOString())
     .first<{ code: string }>();
-  return r?.code ?? null;
+  if (!r) return null;
+  const link = ownerJoinLink(env, origin, r.code);
+  return { code: r.code, link, qr: qrSVG(link) };
 }
 
 function health(env: Env, origin: string): Health {
@@ -593,13 +598,13 @@ async function pages(req: Request, env: Env, path: string, url: URL): Promise<st
     return renderOverview(ctx, await overview(env, host, list), {
       people: list,
       owner: mine,
-      ownerCode: mine ? null : await ownerCode(env),
+      ownerConnect: mine ? null : await ownerCode(env, origin),
       health: health(env, origin),
     });
   }
   if (path === "devices") {
     const mine = await ownerAccount(env, host);
-    return renderDevices(ctx, mine, mine ? null : await ownerCode(env));
+    return renderDevices(ctx, mine, mine ? null : await ownerCode(env, origin));
   }
   if (path === "team") return renderTeam(ctx, await people(env, host), null);
   const t = /^team\/([^/]+)$/.exec(path);

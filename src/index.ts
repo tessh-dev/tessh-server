@@ -57,6 +57,8 @@ export function serverInfo(req: Request, env: Env) {
     signups: env.SIGNUPS,
     keysURL: originFor(req, env),
     setUp: env.SETTINGS.setupDone,
+    /** Set up, but the owner has not made their own Tessh account yet. */
+    ownerPending: env.SETTINGS.setupDone && !env.SETTINGS.ownerUserId,
     instance: env.INSTANCE_ID,
   };
 }

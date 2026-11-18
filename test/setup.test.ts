@@ -166,7 +166,10 @@ describe("browser setup", () => {
 
     const done = await b.post("/setup/api/team", { signups: "invite", invites: ["Sam", " Priya "], defaultBytes: 5368709120 });
     expect(done.status).toBe(200);
-    const out = (await done.json()) as { invites: { label: string; url: string }[]; ownerCode: string };
+    const out = (await done.json()) as { invites: { label: string; url: string }[]; ownerCode: string; ownerLink: string; ownerQR: string };
+    expect(out.ownerLink).toMatch(/^tessh:\/\/join\?server=/);
+    expect(out.ownerLink).toContain(`code=${out.ownerCode}`);
+    expect(out.ownerQR.startsWith("<svg")).toBe(true);
     expect(out.invites.map((i) => i.label)).toEqual(["Sam", "Priya"]);
     for (const i of out.invites) expect(i.url).toMatch(/^https:\/\/sync\.example\.com\/join\/[A-Za-z0-9]{6}$/);
     expect(out.ownerCode).toMatch(/^[A-Za-z0-9]{6}$/);
@@ -241,6 +244,8 @@ describe("browser setup", () => {
     // The team Ready card keeps the invite links.
     expect(page).toContain('<p class="sub for-team" data-ready-sub>Send these invite links, then connect your own apps.</p>');
     expect(page).toContain('<div class="rows for-team" data-invites hidden></div>');
+    expect(page).toContain("data-owner-link");
+    expect(page).toContain("data-owner-qr");
     const done = await b.post("/setup/api/team", { signups, invites: ["Sam"], defaultBytes: 524288000 });
     expect(done.status).toBe(200);
     const out = (await done.json()) as { invites: { label: string; url: string }[] };

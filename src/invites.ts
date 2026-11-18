@@ -51,6 +51,13 @@ export function createInvite(
   }
 }
 
+/** The link that opens the Tessh app on the owner sign-up page with the server, code and the admin email filled in. */
+export function ownerJoinLink(env: Env, origin: string, code: string): string {
+  const row = env.DB.prepare("SELECT email FROM owner WHERE id = 1").firstSync<{ email: string }>();
+  const email = row?.email ? `&email=${encodeURIComponent(row.email)}` : "";
+  return `tessh://join?server=${encodeURIComponent(origin)}&code=${encodeURIComponent(code)}${email}`;
+}
+
 /** Cancels a code that is still waiting; a used, cancelled or unknown code is a 404. */
 export function cancelInvite(env: Env, code: string): void {
   const r = env.DB.prepare("UPDATE invites SET cancelled_at = ? WHERE code = ? AND used_at IS NULL AND cancelled_at IS NULL")

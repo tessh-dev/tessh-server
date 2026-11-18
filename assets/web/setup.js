@@ -342,6 +342,8 @@ document.querySelectorAll('button[data-copy]').forEach((btn) => {
       list.hidden = res.invites.length === 0;
       if (!res.invites.length) done.querySelector('[data-ready-sub]').textContent = 'Now connect your own apps.';
       done.querySelector('[data-owner-code]').textContent = res.ownerCode;
+      done.querySelector('[data-owner-link]').href = res.ownerLink;
+      done.querySelector('[data-owner-qr]').innerHTML = res.ownerQR;
       showDone();
     });
   }
