@@ -110,13 +110,25 @@ describe("effective limits", () => {
   it("GET /v1/account reports the built-in limit, then the server default setting", async () => {
     const a = await registerUser("lim1@x.com");
     let acct = await j(await call("GET", "/v1/account", undefined, a.token));
-    expect(acct.plan).toBeUndefined();
+    expect(acct.plan).toBe("self-hosted");
     expect(acct.limits).toEqual({ bytes: DEFAULT_LIMITS.bytes, items: 100_000, devices: 50 });
 
     await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('default_bytes', '1000')").run();
     try {
       acct = await j(await call("GET", "/v1/account", undefined, a.token));
       expect(acct.limits).toEqual({ bytes: 1000, items: 100_000, devices: 50 });
+    } finally {
+      await env.DB.prepare("DELETE FROM settings WHERE key = 'default_bytes'").run();
+    }
+  });
+
+  it("no limit is sent as a number the apps can decode", async () => {
+    const a = await registerUser("lim6@x.com");
+    await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('default_bytes', '-1')").run();
+    try {
+      const acct = await j(await call("GET", "/v1/account", undefined, a.token));
+      expect(acct.limits.bytes).toBe(Number.MAX_SAFE_INTEGER);
+      expect(typeof acct.plan).toBe("string");
     } finally {
       await env.DB.prepare("DELETE FROM settings WHERE key = 'default_bytes'").run();
     }

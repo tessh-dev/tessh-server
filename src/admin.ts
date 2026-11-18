@@ -218,11 +218,6 @@ function optInt(v: unknown, name: string, min: number, max: number): number | nu
   if (typeof v !== "number" || !Number.isInteger(v) || v < min || v > max) throw invalid(`Invalid ${name}`);
   return v;
 }
-function reqInt(v: unknown, name: string, min: number, max: number): number {
-  const n = optInt(v, name, min, max);
-  if (n === null) throw invalid(`${name} is required`);
-  return n;
-}
 async function userRow(env: Env, id: string) {
   const u = await env.DB.prepare("SELECT id, email, suspended_at FROM users WHERE id = ?")
     .bind(id)

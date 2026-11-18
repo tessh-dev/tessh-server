@@ -38,7 +38,7 @@ export async function effectiveLimits(env: Env, userId: string): Promise<Effecti
  */
 export const LIMIT_SQL = {
   from: "users u",
-  bytes: `(SELECT CASE WHEN b < 0 THEN 9223372036854775807 ELSE b END FROM (SELECT COALESCE(u.bytes_limit,
+  bytes: `(SELECT CASE WHEN b < 0 THEN 9007199254740991 ELSE b END FROM (SELECT COALESCE(u.bytes_limit,
     (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'default_bytes'), ${DEFAULT_LIMITS.bytes}) AS b))`,
   items: String(DEFAULT_LIMITS.items),
   devices: String(DEFAULT_LIMITS.devices),

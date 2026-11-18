@@ -56,6 +56,8 @@ export function parseKdf(v: unknown): typeof KDF {
   return { alg: "argon2id", opslimit: k.opslimit as number, memlimit: k.memlimit as number };
 }
 
+const finite = (n: number) => (Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER);
+
 export async function accountView(env: Env, userId: string) {
   const u = await env.DB.prepare("SELECT email, username, recovery_hash, recovery_created_at, created_at FROM users WHERE id = ?")
     .bind(userId)
@@ -75,8 +77,11 @@ export async function accountView(env: Env, userId: string) {
   return {
     email: u.email,
     username: u.username,
+    // Shipped apps decode a plan name; a self-hosted server has just the one.
+    plan: "self-hosted",
     usage: { bytes: use?.bytes ?? 0, items: use?.items ?? 0 },
-    limits: { bytes: lim.bytes, items: lim.items, devices: lim.devices },
+    // "No limit" is a number the apps can decode.
+    limits: { bytes: finite(lim.bytes), items: finite(lim.items), devices: lim.devices },
     recovery: u.recovery_hash ? { enabled: true, createdAt: u.recovery_created_at } : { enabled: false, createdAt: null },
     createdAt: u.created_at,
     keyPageSeq: page?.seq ?? 0,

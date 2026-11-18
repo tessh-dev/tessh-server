@@ -15,6 +15,7 @@ export const esc = (v: unknown): string => String(v ?? "").replace(/[&<>"']/g, (
 
 const MiB = 1024 * 1024;
 export function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n >= Number.MAX_SAFE_INTEGER) return "No limit";
   if (n < 1024) return `${n} B`;
   if (n < MiB) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
   if (n < 1024 * MiB) return `${(n / MiB).toFixed(n < 10 * MiB ? 1 : 0)} MB`;

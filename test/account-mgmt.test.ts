@@ -17,6 +17,7 @@ describe("account management", () => {
     const a = (await (await call("GET", "/v1/account", undefined, token)).json()) as any;
     expect(a.username).toBeNull();
     expect(a.usage).toEqual({ bytes: 8, items: 2 });
+    expect(a.plan).toBe("self-hosted");
     expect(a.limits).toEqual({ bytes: 1073741824, items: 100000, devices: 50 });
   });
 
