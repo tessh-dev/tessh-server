@@ -104,30 +104,30 @@ a.btn{text-decoration:none}
 .cur{display:inline-block;width:7px;height:14px;background:#60a5fa;vertical-align:-2px;animation:bl 1.1s steps(1) infinite}@keyframes bl{50%{opacity:0}}
 
 /* panel: the Mac app's sidebar, a field strip above a centred column */
-.body{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
-.side{position:sticky;top:0;height:100vh;background:var(--side);border-right:1px solid var(--line2);padding:14px 10px 12px;display:flex;flex-direction:column;overflow-y:auto}
-.srv{display:flex;align-items:center;gap:10px;padding:4px 8px 16px}
-.lg{width:32px;height:32px;border-radius:9px;background:var(--tile);box-shadow:0 0 0 1px rgba(255,255,255,.08);display:grid;place-items:center;flex:none}
-.lg .gly{font-size:12.5px}.lg .gly .t{color:#fff}.lg .gly .c{color:#8c939d}.lg .gly .b{background:#4d8dff}
+.body{display:grid;grid-template-columns:264px minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;background:var(--side);border-right:1px solid var(--line2);padding:20px 14px 16px;display:flex;flex-direction:column;overflow-y:auto}
+.srv{display:flex;align-items:center;gap:12px;padding:4px 8px 22px}
+.lg{width:40px;height:40px;border-radius:11px;background:var(--tile);box-shadow:0 0 0 1px rgba(255,255,255,.08);display:grid;place-items:center;flex:none}
+.lg .gly{font-size:15px}.lg .gly .t{color:#fff}.lg .gly .c{color:#8c939d}.lg .gly .b{background:#4d8dff}
 .srv-t{min-width:0;flex:1}
-.srv-t b{display:block;font:500 13.5px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.srv-t small{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.srv-t b{display:block;font:600 16px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv-t small{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:13px;color:var(--muted);white-space:nowrap}
 .srv-t small.upd{color:var(--warn)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok);flex:none}
 .menu{display:none;width:34px;height:34px;border-radius:8px;place-items:center;color:var(--ink2)}
 .menu svg{width:18px;height:18px}.menu svg+svg{display:none}
-.navs{display:flex;flex-direction:column;gap:2px;flex:1}
-.nav{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:8px;font:500 13px var(--sans);color:var(--ink2)}
-.nav svg{width:16px;height:16px;flex:none;opacity:.85}
+.navs{display:flex;flex-direction:column;gap:3px;flex:1}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:10px;font:500 15px var(--sans);color:var(--ink2)}
+.nav svg{width:19px;height:19px;flex:none;opacity:.85}
 .nav:hover{background:color-mix(in srgb,var(--pill) 55%,transparent)}
 .nav.on{background:var(--pill);color:var(--ink)}.nav.on svg{opacity:1}
-.nav .ct{margin-left:auto;font:500 11.5px var(--sans);color:var(--soft)}
-.grp{font:600 10.5px var(--sans);color:var(--soft);text-transform:uppercase;letter-spacing:.07em;padding:16px 10px 6px}
-.sbf{margin-top:auto;display:flex;align-items:center;gap:9px;border-top:1px solid var(--line2);padding:12px 4px 0 6px}
-.who.sm{width:28px;height:28px;font-size:12px}
-.sbf-t{flex:1;min-width:0;line-height:1.3}.sbf-t b{display:block;font:500 12.5px var(--sans);color:var(--ink2)}
-.sbf-t small{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.iconbtn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}
+.nav .ct{margin-left:auto;font:500 13px var(--sans);color:var(--soft)}
+.grp{font:600 11.5px var(--sans);color:var(--soft);text-transform:uppercase;letter-spacing:.07em;padding:22px 12px 8px}
+.sbf{margin-top:auto;display:flex;align-items:center;gap:11px;border-top:1px solid var(--line2);padding:14px 4px 0 6px}
+.who.sm{width:34px;height:34px;font-size:14px}
+.sbf-t{flex:1;min-width:0;line-height:1.3}.sbf-t b{display:block;font:500 14px var(--sans);color:var(--ink2)}
+.sbf-t small{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iconbtn{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}
 .iconbtn:hover{background:var(--pill);color:var(--ink)}.iconbtn svg{width:15px;height:15px}
 .iconbtn:focus-visible,.menu:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
