@@ -12,7 +12,7 @@ import {
 } from "./auth.ts";
 import { HttpError, json, readJSON } from "./http.ts";
 import type { Env } from "./index.ts";
-import { DEFAULT_PLAN_SQL, assertCanSignIn, effectiveLimits } from "./limits.ts";
+import { assertCanSignIn, effectiveLimits } from "./limits.ts";
 import { issueChallenge, isEnabled, requireSecondFactor, twoStepView } from "./two-step.ts";
 
 const KDF = { alg: "argon2id", opslimit: 3, memlimit: 67_108_864 };
@@ -57,12 +57,11 @@ export function parseKdf(v: unknown): typeof KDF {
 }
 
 export async function accountView(env: Env, userId: string) {
-  const u = await env.DB.prepare("SELECT email, username, plan, recovery_hash, recovery_created_at, created_at FROM users WHERE id = ?")
+  const u = await env.DB.prepare("SELECT email, username, recovery_hash, recovery_created_at, created_at FROM users WHERE id = ?")
     .bind(userId)
     .first<{
       email: string;
       username: string | null;
-      plan: string;
       recovery_hash: string | null;
       recovery_created_at: string | null;
       created_at: string;
@@ -76,8 +75,6 @@ export async function accountView(env: Env, userId: string) {
   return {
     email: u.email,
     username: u.username,
-    plan: u.plan,
-    planName: lim.planName,
     usage: { bytes: use?.bytes ?? 0, items: use?.items ?? 0 },
     limits: { bytes: lim.bytes, items: lim.items, devices: lim.devices },
     recovery: u.recovery_hash ? { enabled: true, createdAt: u.recovery_created_at } : { enabled: false, createdAt: null },
@@ -125,11 +122,10 @@ export function sessionStatements(env: Env, userId: string, deviceId: string, to
   ];
 }
 
-/** SIGNUPS: `open` lets anyone sign up, `invite` only emails on the admin's invite list, `closed` nobody. */
-async function assertCanSignUp(env: Env, email: string): Promise<void> {
+/** SIGNUPS: `open` lets anyone sign up, `invite` needs an invite code, `closed` nobody. */
+async function assertCanSignUp(env: Env): Promise<void> {
   if (env.SIGNUPS === "open") return;
-  if (env.SIGNUPS === "invite" && (await env.DB.prepare("SELECT 1 FROM invites WHERE email = ?").bind(email).first())) return;
-  if (env.SIGNUPS === "invite") throw new HttpError("invite_required", 403, "This email hasn't been invited to this server. Ask its admin for an invite.");
+  if (env.SIGNUPS === "invite") throw new HttpError("invite_required", 403, "This server needs an invite to create an account. Ask its owner for an invite link.");
   throw new HttpError("signups_closed", 403, "This server isn't accepting new accounts");
 }
 
@@ -148,7 +144,7 @@ async function register(req: Request, env: Env): Promise<Response> {
   const wrappedRecovery = b64Field(b.wrappedVaultKeyRecovery, "wrappedVaultKeyRecovery");
   const device = parseDevice(b.device);
 
-  await assertCanSignUp(env, email);
+  await assertCanSignUp(env);
   if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()) {
     throw new HttpError("email_taken", 409, "Email already registered");
   }
@@ -160,8 +156,8 @@ async function register(req: Request, env: Env): Promise<Response> {
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO users (id, email, auth_hash, salt, kdf, wrapped_vault_key, encrypted_signing_key, signer_public_key,
-           recovery_hash, wrapped_vault_key_recovery, recovery_created_at, created_at, plan)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${DEFAULT_PLAN_SQL})`,
+           recovery_hash, wrapped_vault_key_recovery, recovery_created_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         userId, email, await sha256Hex(authKey), salt, JSON.stringify(kdf), wrapped, sealedSigning, b.signerPublicKey,
         await sha256Hex(recoveryKey), wrappedRecovery, now, now,

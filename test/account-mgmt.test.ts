@@ -11,15 +11,13 @@ const count = async (sql: string, ...args: Value[]) =>
   (await env.DB.prepare(sql).bind(...args).first<{ n: number }>())!.n;
 
 describe("account management", () => {
-  it("account shows plan free, usage and limits", async () => {
+  it("account shows usage and limits", async () => {
     const { token } = await registerUser("m1@x.com");
     await push(token, 2);
     const a = (await (await call("GET", "/v1/account", undefined, token)).json()) as any;
-    expect(a.plan).toBe("free");
     expect(a.username).toBeNull();
     expect(a.usage).toEqual({ bytes: 8, items: 2 });
-    expect(a.planName).toBe("Free");
-    expect(a.limits).toEqual({ bytes: 5242880, items: 10000, devices: null });
+    expect(a.limits).toEqual({ bytes: 1073741824, items: 100000, devices: 50 });
   });
 
   it("username: valid, reserved, taken, and changing frees the old one", async () => {

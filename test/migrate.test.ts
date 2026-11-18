@@ -20,11 +20,32 @@ describe("migrations", () => {
       expect(migrate(d2, MIGRATIONS)).toEqual([]);
       const names = d2.sqlite.prepare("SELECT name FROM schema_migrations ORDER BY name").all().map((r) => (r as { name: string }).name);
       expect(names).toEqual(MIGRATIONS.map((m) => m.name));
-      expect(d2.sqlite.prepare("SELECT COUNT(*) AS n FROM plans").get()).toEqual({ n: 2 });
       d2.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("creates the per-person limit, invite code, settings and owner tables", () => {
+    const d = new Database(":memory:");
+    migrate(d, MIGRATIONS);
+    const cols = (t: string) =>
+      d.sqlite.prepare("SELECT name FROM pragma_table_info(?) ORDER BY cid").all(t).map((r) => (r as { name: string }).name);
+    const tables = d.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => (r as { name: string }).name);
+    expect(tables).not.toContain("plans");
+    const users = cols("users");
+    expect(users).toEqual(expect.arrayContaining(["bytes_limit", "suspended_at"]));
+    expect(users).not.toContain("items_limit");
+    expect(users).not.toContain("devices_limit");
+    expect(cols("admin_audit")).toEqual(["id", "at", "actor", "action", "user_id", "detail"]);
+    expect(cols("invites")).toEqual(["code", "label", "kind", "created_at", "expires_at", "cancelled_at", "used_at", "used_by"]);
+    expect(cols("settings")).toEqual(["key", "value"]);
+    expect(cols("owner")).toEqual(["id", "email", "password_hash", "totp_secret", "totp_last_step", "created_at", "updated_at"]);
+    expect(cols("owner_sessions")).toEqual(["token_hash", "created_at", "last_seen_at", "ip", "agent"]);
+    expect(() => d.sqlite.prepare("INSERT INTO invites (code, label, kind, created_at) VALUES ('c', 'l', 'admin', 'x')").run()).toThrow();
+    expect(() =>
+      d.sqlite.prepare("INSERT INTO owner (id, email, password_hash, created_at, updated_at) VALUES (2, 'a', 'b', 'x', 'x')").run(),
+    ).toThrow();
   });
 
   it("applies only the new ones on upgrade", () => {

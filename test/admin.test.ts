@@ -1,6 +1,6 @@
 import { ADMIN, SELF, basic, env } from "./harness.ts";
 import { describe, expect, it } from "vitest";
-import { resolveLimits } from "../src/limits.ts";
+import { DEFAULT_LIMITS, resolveLimits } from "../src/limits.ts";
 import { writeItems } from "../src/sync.ts";
 import { handleAdmin } from "../src/admin.ts";
 import { b64, bytes, call, registerUser, uuid } from "./helpers.ts";
@@ -20,7 +20,7 @@ const audits = async (action: string, userId?: string) =>
   (
     await env.DB.prepare(`SELECT * FROM admin_audit WHERE action = ? ${userId ? "AND user_id = ?" : ""} ORDER BY id`)
       .bind(...(userId ? [action, userId] : [action]))
-      .all<{ admin_email: string; detail: string; user_id: string | null }>()
+      .all<{ actor: string; detail: string; user_id: string | null }>()
   ).results;
 
 const login = (email: string, name = "Other Mac") =>
@@ -43,7 +43,7 @@ describe("admin password", () => {
         expect(res.headers.get("www-authenticate")).toMatch(/^Basic realm=/);
       }
     }
-    const write = await admin("POST", "/api/invites", { email: "x@example.com" }, { auth: basic("wrong") });
+    const write = await admin("POST", `/api/accounts/${uuid()}/suspend`, undefined, { auth: basic("wrong") });
     expect(write.status).toBe(401);
   });
 
@@ -66,7 +66,7 @@ describe("admin password", () => {
 describe("admin pages", () => {
   it("serve HTML with a strict CSP and separate JS/CSS, no inline script or style", async () => {
     const { userId } = await registerUser("page1@x.com");
-    for (const path of ["/", "/accounts", `/accounts/${userId}`, "/invites", "/plans", "/audit", "/accounts?filter=near&q=page"]) {
+    for (const path of ["/", "/accounts", `/accounts/${userId}`, "/audit", "/accounts?filter=near&q=page"]) {
       const res = await admin("GET", path);
       expect(res.status, path).toBe(200);
       const csp = res.headers.get("content-security-policy")!;
@@ -100,77 +100,74 @@ describe("admin pages", () => {
 });
 
 describe("effective limits", () => {
-  const row = (o: Partial<Parameters<typeof resolveLimits>[0]>) =>
-    resolveLimits({
-      plan: "x", suspended_at: null, u_bytes: null, u_items: null, u_devices: null,
-      p_name: null, p_bytes: null, p_items: null, p_devices: null, p_found: 0, ...o,
-    });
-
-  it("override > plan > built-in default", () => {
-    expect(row({})).toMatchObject({ bytes: 5242880, items: 10000, devices: null });
-    expect(row({ p_found: 1, p_name: "Pro", p_bytes: 100, p_items: 10, p_devices: 3 })).toMatchObject({ bytes: 100, items: 10, devices: 3, planName: "Pro" });
-    expect(row({ p_found: 1, p_bytes: 100, p_items: 10, p_devices: 3, u_bytes: 7, u_devices: 9 })).toMatchObject({ bytes: 7, items: 10, devices: 9 });
+  it("an account's own limit beats the server default; a negative size is no limit", () => {
+    expect(resolveLimits({ bytes_limit: null }, 1000)).toMatchObject({ bytes: 1000, items: 100_000, devices: 50 });
+    expect(resolveLimits({ bytes_limit: 7 }, 1000).bytes).toBe(7);
+    expect(resolveLimits({ bytes_limit: null }, -1).bytes).toBe(Infinity);
+    expect(resolveLimits({ bytes_limit: -1 }, 1000).bytes).toBe(Infinity);
   });
 
-  it("new sign-ups get the default plan; GET /v1/account reports plan and limits", async () => {
+  it("GET /v1/account reports the built-in limit, then the server default setting", async () => {
     const a = await registerUser("lim1@x.com");
     let acct = await j(await call("GET", "/v1/account", undefined, a.token));
-    expect(acct.plan).toBe("free");
-    expect(acct.limits).toEqual({ bytes: 5242880, items: 10000, devices: null });
+    expect(acct.plan).toBeUndefined();
+    expect(acct.limits).toEqual({ bytes: DEFAULT_LIMITS.bytes, items: 100_000, devices: 50 });
 
-    await env.DB.prepare(
-      "INSERT INTO plans (id, name, bytes_limit, items_limit, devices_limit, created_at, updated_at) VALUES ('starter', 'Starter', 1000, 50, 2, 'x', 'x')",
-    ).run();
-    expect((await admin("POST", "/api/plans/starter/default")).status).toBe(200);
-    const b = await registerUser("lim2@x.com");
-    acct = await j(await call("GET", "/v1/account", undefined, b.token));
-    expect(acct.plan).toBe("starter");
-    expect(acct.planName).toBe("Starter");
-    expect(acct.limits).toEqual({ bytes: 1000, items: 50, devices: 2 });
-    // Put free back as the default for the other tests.
-    expect((await admin("POST", "/api/plans/free/default")).status).toBe(200);
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM plans WHERE is_default = 1").first<{ n: number }>())!.n).toBe(1);
+    await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('default_bytes', '1000')").run();
+    try {
+      acct = await j(await call("GET", "/v1/account", undefined, a.token));
+      expect(acct.limits).toEqual({ bytes: 1000, items: 100_000, devices: 50 });
+    } finally {
+      await env.DB.prepare("DELETE FROM settings WHERE key = 'default_bytes'").run();
+    }
   });
 
-  it("quota follows a custom plan, then an override beats it", async () => {
+  it("quota follows the server default, then an account limit beats it", async () => {
     const { token, userId } = await registerUser("lim3@x.com");
-    expect(
-      (await admin("POST", "/api/plans", { id: "tiny", name: "Tiny", bytes: 8, items: 100, devices: null })).status,
-    ).toBe(201);
-    expect((await admin("POST", `/api/accounts/${userId}/plan`, { plan: "tiny" })).status).toBe(200);
-    expect((await push(token, "QUFB")).status).toBe(200); // 4 bytes
-    expect((await push(token, "QUFB")).status).toBe(200); // 8 bytes
-    const over = await push(token, "QUFB");
-    expect(over.status).toBe(413);
-    expect((await j(over)).error).toBe("quota_exceeded");
-    // The in-batch guard uses the same limits even when the pre-check is bypassed.
-    await expect(writeItems(env as any, userId, [{ id: uuid(), deleted: false, blob: "QUFB", size: 4 }])).rejects.toMatchObject({ code: "quota_exceeded" });
+    await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('default_bytes', '8')").run();
+    try {
+      expect((await push(token, "QUFB")).status).toBe(200); // 4 bytes
+      expect((await push(token, "QUFB")).status).toBe(200); // 8 bytes
+      const over = await push(token, "QUFB");
+      expect(over.status).toBe(413);
+      expect((await j(over)).error).toBe("quota_exceeded");
+      // The in-batch guard uses the same limits even when the pre-check is bypassed.
+      await expect(writeItems(env as any, userId, [{ id: uuid(), deleted: false, blob: "QUFB", size: 4 }])).rejects.toMatchObject({ code: "quota_exceeded" });
 
-    expect((await admin("POST", `/api/accounts/${userId}/limits`, { bytes: 12, items: null, devices: null })).status).toBe(200);
-    expect((await push(token, "QUFB")).status).toBe(200);
-    expect((await push(token, "QUFB")).status).toBe(413);
-    expect((await j(await call("GET", "/v1/account", undefined, token))).limits.bytes).toBe(12);
+      expect((await admin("POST", `/api/accounts/${userId}/limits`, { bytes: 12 })).status).toBe(200);
+      expect((await push(token, "QUFB")).status).toBe(200);
+      expect((await push(token, "QUFB")).status).toBe(413);
+      expect((await j(await call("GET", "/v1/account", undefined, token))).limits.bytes).toBe(12);
+      expect((await audits("custom_limits", userId))[0].actor).toBe(ADMIN_NAME);
 
-    // Editing the plan applies to everyone on it right away; the override still wins for bytes.
-    expect((await admin("PUT", "/api/plans/tiny", { name: "Tiny", bytes: 1000, items: 3, devices: null })).status).toBe(200);
-    const acct = await j(await call("GET", "/v1/account", undefined, token));
-    expect(acct.limits).toEqual({ bytes: 12, items: 3, devices: null });
-    expect((await push(token, "QQ==")).status).toBe(413); // 3 items already, limit 3
-    expect((await audits("custom_limits", userId))[0].admin_email).toBe(ADMIN_NAME);
+      // A blank limit goes back to the default.
+      expect((await admin("POST", `/api/accounts/${userId}/limits`, { bytes: null })).status).toBe(200);
+      expect((await j(await call("GET", "/v1/account", undefined, token))).limits.bytes).toBe(8);
+
+      // -1 as the server default means no limit.
+      await env.DB.prepare("UPDATE settings SET value = '-1' WHERE key = 'default_bytes'").run();
+      expect((await push(token, "QUFB")).status).toBe(200);
+    } finally {
+      await env.DB.prepare("DELETE FROM settings WHERE key = 'default_bytes'").run();
+    }
   });
 
-  it("devices_limit blocks a new sign-in beyond the limit", async () => {
+  it("a new sign-in beyond the device limit is refused", async () => {
     const { userId } = await registerUser("lim4@x.com");
-    expect((await admin("POST", `/api/accounts/${userId}/limits`, { bytes: null, items: null, devices: 2 })).status).toBe(200);
-    expect((await login("lim4@x.com")).status).toBe(200);
-    const res = await login("lim4@x.com", "Third");
+    const now = new Date().toISOString();
+    for (let i = 0; i < DEFAULT_LIMITS.devices - 1; i++) {
+      await env.DB.prepare("INSERT INTO devices (id, user_id, name, platform, created_at, last_seen_at) VALUES (?, ?, 'd', 'macos', ?, ?)")
+        .bind(uuid(), userId, now, now)
+        .run();
+    }
+    const res = await login("lim4@x.com");
     expect(res.status).toBe(403);
     expect((await j(res)).error).toBe("device_limit");
   });
 
   it("rejects bad limit values", async () => {
     const { userId } = await registerUser("lim5@x.com");
-    for (const body of [{ bytes: -1 }, { items: 1.5 }, { devices: "3" }, { bytes: 1e12 }]) {
+    for (const body of [{ bytes: -1 }, { bytes: 1.5 }, { bytes: "3" }, { bytes: 1e12 }]) {
       expect((await admin("POST", `/api/accounts/${userId}/limits`, body)).status).toBe(400);
     }
   });
@@ -214,7 +211,7 @@ describe("account actions", () => {
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM backup_codes WHERE user_id = ?").bind(userId).first<{ n: number }>())!.n).toBe(0);
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM login_challenges WHERE user_id = ?").bind(userId).first<{ n: number }>())!.n).toBe(0);
     expect((await login("r2fa@x.com")).status).toBe(200);
-    expect((await audits("reset_two_step", userId))[0].admin_email).toBe(ADMIN_NAME);
+    expect((await audits("reset_two_step", userId))[0].actor).toBe(ADMIN_NAME);
   });
 
   it("sign out all devices ends every session", async () => {
@@ -241,14 +238,6 @@ describe("account actions", () => {
     expect(log.audit[0]).toMatchObject({ action: "delete_account", email: "del@x.com", admin: ADMIN_NAME });
   });
 
-  it("change plan refuses archived and unknown plans", async () => {
-    const { userId } = await registerUser("cp@x.com");
-    expect((await admin("POST", `/api/accounts/${userId}/plan`, { plan: "ghost" })).status).toBe(404);
-    expect((await admin("POST", `/api/accounts/${userId}/plan`, { plan: "pro" })).status).toBe(200);
-    expect(JSON.parse((await audits("change_plan", userId))[0].detail)).toEqual({ from: "free", to: "pro" });
-    expect((await admin("POST", `/api/accounts/${uuid()}/plan`, { plan: "pro" })).status).toBe(404);
-  });
-
   it("search and filters", async () => {
     const { userId } = await registerUser("findme_42@x.com");
     await env.DB.prepare("UPDATE users SET username = 'finder' WHERE id = ?").bind(userId).run();
@@ -256,46 +245,9 @@ describe("account actions", () => {
     expect(await ids("q=findme_42")).toEqual([userId]);
     expect(await ids("q=FINDER")).toEqual([userId]);
     expect(await ids("q=%25")).not.toContain("nothing"); // a literal % is escaped, not a wildcard error
-    expect(await ids("filter=plan:free&q=findme")).toEqual([userId]);
-    expect(await ids("filter=plan:pro&q=findme")).toEqual([]);
     await env.DB.prepare("UPDATE users SET bytes_limit = 10 WHERE id = ?").bind(userId).run();
     await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 8)").bind(userId, uuid()).run();
     expect(await ids("filter=near&q=findme")).toEqual([userId]);
-  });
-});
-
-describe("plans", () => {
-  it("archive: refused while in use unless accounts are moved; never the default", async () => {
-    const { userId } = await registerUser("arch@x.com");
-    expect((await admin("POST", "/api/plans", { id: "old", name: "Old", bytes: 100, items: 10 })).status).toBe(201);
-    expect((await admin("POST", "/api/plans", { id: "old", name: "Dup", bytes: 100, items: 10 })).status).toBe(409);
-    expect((await admin("POST", `/api/accounts/${userId}/plan`, { plan: "old" })).status).toBe(200);
-
-    const inUse = await admin("POST", "/api/plans/old/archive");
-    expect(inUse.status).toBe(409);
-    expect(await j(inUse)).toMatchObject({ error: "plan_in_use", accounts: 1 });
-    expect((await admin("POST", "/api/plans/old/archive", { move_to: "old" })).status).toBe(400);
-    expect((await admin("POST", "/api/plans/old/archive", { move_to: "pro" })).status).toBe(200);
-    expect((await env.DB.prepare("SELECT plan FROM users WHERE id = ?").bind(userId).first<{ plan: string }>())!.plan).toBe("pro");
-    const plans = (await j(await admin("GET", "/api/plans"))).plans;
-    expect(plans.find((p: any) => p.id === "old")).toMatchObject({ archived: true, accounts: 0 });
-    expect(JSON.parse((await audits("archive_plan")).at(-1)!.detail)).toEqual({ plan: "old", moved: 1, to: "pro" });
-
-    // Archived plans can't be chosen or made default; the default can't be archived.
-    expect((await admin("POST", `/api/accounts/${userId}/plan`, { plan: "old" })).status).toBe(400);
-    expect((await admin("POST", "/api/plans/old/default")).status).toBe(400);
-    expect((await admin("POST", "/api/plans/free/archive")).status).toBe(400);
-  });
-
-  it("validates plan fields", async () => {
-    for (const body of [
-      { id: "Bad Id", name: "x", bytes: 1, items: 1 },
-      { id: "ok-id", name: "", bytes: 1, items: 1 },
-      { id: "ok-id", name: "x", bytes: 0, items: 1 },
-      { id: "ok-id", name: "x", bytes: 1 },
-    ]) {
-      expect((await admin("POST", "/api/plans", body)).status).toBe(400);
-    }
   });
 });
 

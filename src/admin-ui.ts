@@ -1,13 +1,13 @@
 // Admin panel pages (desktop and 360 px phone). Strict CSP: no inline script or style,
 // so widths/heights come from classes (w0…w20, h0…h20) and behaviour from /admin.js via data attributes.
-import type { AccountDetail, AccountSummary, AuditRow, Filter, Invite, Plan } from "./admin.ts";
+import type { AccountDetail, AccountSummary, AuditRow, Filter } from "./admin.ts";
 import type { Signups } from "./config.ts";
 
 export interface Ctx {
   admin: string;
   host: string;
   signups: Signups;
-  counts: { accounts: number; plans: number; invites: number };
+  counts: { accounts: number };
 }
 
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -50,11 +50,7 @@ function meter(used: number, limit: number): string {
   // Any use at all shows a sliver, so 1% never reads as empty.
   return `<span class="meter"><i class="w${used > 0 ? Math.max(1, step(p)) : 0}${p >= 80 ? " warn" : ""}"></i></span>`;
 }
-const limitText = (l: { bytes: number; items: number; devices: number | null }) =>
-  `${fmtBytes(l.bytes)} · ${fmtInt(l.items)} items · ${l.devices === null ? "unlimited devices" : `${l.devices} device${l.devices === 1 ? "" : "s"}`}`;
-const planPill = (p: { id: string; name: string }) => `<span class="pill${p.id === "free" ? "" : " pro"}">${esc(p.name)}</span>`;
-
-type Section = "overview" | "accounts" | "invites" | "plans" | "audit";
+type Section = "overview" | "accounts" | "audit";
 
 const SIGNUPS_LABEL: Record<Signups, string> = { open: "Sign-ups open", invite: "Invite only", closed: "Sign-ups closed" };
 
@@ -67,7 +63,7 @@ function layout(ctx: Ctx, section: Section, title: string, body: string): string
 <body><div class="m">
 <nav class="sd" aria-label="Admin">
  <div class="lg"><a class="brand" href="/"><i>t›</i>Tessh <small>admin</small></a><span class="av" title="${esc(ctx.admin)}">${esc(who[0]?.toUpperCase() ?? "?")}</span></div>
- <div class="nav">${nav("overview", "/", "Overview")}${nav("accounts", "/accounts", "Accounts", ctx.counts.accounts)}${nav("invites", "/invites", "Invites", ctx.counts.invites)}${nav("plans", "/plans", "Plans", ctx.counts.plans)}${nav("audit", "/audit", "Audit log")}</div>
+ <div class="nav">${nav("overview", "/", "Overview")}${nav("accounts", "/accounts", "Accounts", ctx.counts.accounts)}${nav("audit", "/audit", "Audit log")}</div>
  <div class="who">${esc(ctx.host)}<br>${esc(SIGNUPS_LABEL[ctx.signups])} · ${esc(who)}</div>
 </nav>
 <main class="mn">${body}
@@ -78,7 +74,7 @@ function layout(ctx: Ctx, section: Section, title: string, body: string): string
 function accountRow(a: AccountSummary, now: number): string {
   const devices = `${a.devices} device${a.devices === 1 ? "" : "s"}`;
   return `<a class="acc" href="/accounts/${esc(a.id)}"><span class="em">${esc(maskEmail(a.email))}</span><span class="seen">${esc(ago(a.lastSeenAt, now))}</span>
-<span class="meta">${planPill(a.plan)}${a.username ? `<span class="mono">/${esc(a.username)}</span>` : ""}<span>${devices}</span><span>${meter(a.usage.bytes, a.limits.bytes)}${fmtBytes(a.usage.bytes)}</span>${a.twoStep ? '<span class="pill on">2FA</span>' : ""}${a.suspended ? '<span class="pill bad">Suspended</span>' : ""}</span></a>`;
+<span class="meta">${a.username ? `<span class="mono">/${esc(a.username)}</span>` : ""}<span>${devices}</span><span>${meter(a.usage.bytes, a.limits.bytes)}${fmtBytes(a.usage.bytes)}</span>${a.twoStep ? '<span class="pill on">2FA</span>' : ""}${a.suspended ? '<span class="pill bad">Suspended</span>' : ""}</span></a>`;
 }
 
 function accountList(rows: AccountSummary[], empty: string): string {
@@ -126,9 +122,9 @@ ${accountList(recent, "No accounts yet.")}</div>`,
 
 const FILTERS: [Filter, string][] = [["all", "All"], ["two_step", "Two-step"], ["near", "Near limit"], ["suspended", "Suspended"]];
 
-export function renderAccounts(ctx: Ctx, rows: AccountSummary[], q: string, filter: Filter, plans: Plan[]): string {
+export function renderAccounts(ctx: Ctx, rows: AccountSummary[], q: string, filter: Filter): string {
   const href = (f: Filter) => `/accounts?${new URLSearchParams({ ...(q ? { q } : {}), ...(f === "all" ? {} : { filter: f }) })}`;
-  const chips = [...FILTERS, ...plans.filter((p) => !p.archived).map((p): [Filter, string] => [`plan:${p.id}`, p.name])]
+  const chips = FILTERS
     .map(([f, label]) => `<a class="chip${f === filter ? " on" : ""}" href="${esc(href(f))}">${esc(label)}</a>`)
     .join("");
   return layout(
@@ -153,11 +149,9 @@ function dialog(id: string, title: string, inner: string, opts: { api: string; m
 const numField = (name: string, label: string, value: number | null, placeholder: string, scale?: number, required = false) =>
   `<label>${esc(label)}<input name="${name}" inputmode="numeric" data-type="int"${scale ? ` data-scale="${scale}"` : ""} value="${value === null ? "" : esc(scale ? +(value / scale).toFixed(2) : value)}" placeholder="${esc(placeholder)}"${required ? " required" : ""} autocomplete="off"></label>`;
 
-export function renderAccount(ctx: Ctx, a: AccountDetail, plans: Plan[], audit: AuditRow[]): string {
+export function renderAccount(ctx: Ctx, a: AccountDetail, audit: AuditRow[]): string {
   const now = Date.now();
   const base = `/api/accounts/${a.id}`;
-  const active = plans.filter((p) => !p.archived);
-  const pl = a.planLimits;
   const devices = a.deviceList.length
     ? a.deviceList
         .map((d) => `<li><span>${esc(d.name)} <span class="soft">${esc(d.platform)}</span></span><span class="soft">last sync ${esc(ago(d.lastSeenAt, now))}</span></li>`)
@@ -166,33 +160,24 @@ export function renderAccount(ctx: Ctx, a: AccountDetail, plans: Plan[], audit: 
   const facts: [string, string][] = [
     ["Created", fmtDate(a.createdAt)],
     ["Last seen", ago(a.lastSeenAt, now)],
-    ["Plan", `${esc(a.plan.name)} <span class="mono soft">${esc(a.plan.id)}</span>`],
     ["Two-step", a.twoStep ? `On · ${a.backupCodesLeft} backup code${a.backupCodesLeft === 1 ? "" : "s"} left` : "Off"],
     ["Recovery code", a.recovery ? "Set" : "Not set"],
     ["Key page", a.keyPage ? `<span class="mono">/${esc(a.keyPage.username)}</span>${a.keyPage.seq ? ` · v${a.keyPage.seq}` : " · not published"}` : "None"],
     ["Status", a.suspended ? `<span class="bad-t">Suspended ${esc(fmtDate(a.suspendedAt))}</span>` : "Active"],
   ];
-  const custom = a.overrides.bytes !== null || a.overrides.items !== null || a.overrides.devices !== null;
+  const custom = a.overrides.bytes !== null;
   const usage = `<div class="use">
  <div><span>Storage</span><span>${fmtBytes(a.usage.bytes)} of ${fmtBytes(a.limits.bytes)}</span></div>${meter(a.usage.bytes, a.limits.bytes).replace('class="meter"', 'class="meter wide"')}
  <div><span>Items</span><span>${fmtInt(a.usage.items)} of ${fmtInt(a.limits.items)}</span></div>${meter(a.usage.items, a.limits.items).replace('class="meter"', 'class="meter wide"')}
- <div><span>Devices</span><span>${a.devices} of ${a.limits.devices === null ? "unlimited" : a.limits.devices}</span></div>
- ${custom ? '<p class="soft">Custom limits set for this account.</p>' : ""}</div>`;
+ <div><span>Devices</span><span>${a.devices} of ${a.limits.devices}</span></div>
+ ${custom ? '<p class="soft">Custom storage limit set for this account.</p>' : ""}</div>`;
 
-  const planOpts = active
-    .map((p) => `<option value="${esc(p.id)}"${p.id === a.plan.id ? " selected" : ""}>${esc(p.name)} · ${esc(limitText(p.limits))}</option>`)
-    .join("");
   const dialogs = [
-    dialog("d-plan", "Change plan", `<label>Plan<select name="plan">${planOpts}</select></label><p class="soft">Custom limits, if any, still win over the plan.</p>`, {
-      api: `${base}/plan`, method: "POST", done: "reload", submit: "Change plan",
-    }),
     dialog(
       "d-limits",
-      "Custom limits",
-      `<p class="soft">Blank uses the plan's value.</p>
-${numField("bytes", "Storage (MB)", a.overrides.bytes, pl.bytes === null ? "plan" : `${+(pl.bytes / MiB).toFixed(2)} (plan)`, MiB)}
-${numField("items", "Items", a.overrides.items, pl.items === null ? "plan" : `${pl.items} (plan)`)}
-${numField("devices", "Devices", a.overrides.devices, pl.devices === null ? "unlimited (plan)" : `${pl.devices} (plan)`)}`,
+      "Storage limit",
+      `<p class="soft">Blank uses the server default.</p>
+${numField("bytes", "Storage (MB)", a.overrides.bytes, "server default", MiB)}`,
       { api: `${base}/limits`, method: "POST", done: "reload", submit: "Save limits" },
     ),
     dialog("d-signout", "Sign out all devices", `<p>Ends every session on ${a.devices} device${a.devices === 1 ? "" : "s"}. The apps will ask for the password again.</p>`, {
@@ -224,14 +209,14 @@ ${numField("devices", "Devices", a.overrides.devices, pl.devices === null ? "unl
     `<div class="hd"><h1><a class="back" href="/accounts" aria-label="Back to accounts">‹</a> Account</h1><span>${esc(a.id)}</span></div>
 <div class="c drw"><h3>${esc(a.email)}</h3><small>Created ${esc(fmtDate(a.createdAt))} · ${fmtInt(a.usage.items)} encrypted item${a.usage.items === 1 ? "" : "s"}</small>
  <div class="acts">
-  <button class="btn" data-open="d-plan">Change plan</button><button class="btn" data-open="d-limits">Custom limits</button>
+  <button class="btn" data-open="d-limits">Storage limit</button>
   <button class="btn" data-open="d-signout">Sign out devices</button><button class="btn" data-open="d-2fa"${a.twoStep ? "" : " disabled"}>Reset two-step</button>
   <button class="btn" data-open="d-suspend">${a.suspended ? "Unsuspend" : "Suspend"}</button><a class="btn" href="/audit?user=${esc(a.id)}">Audit log</a>
   <button class="btn bad wide" data-open="d-delete">Delete account</button>
  </div></div>
 <div class="grid2">
  <div class="c"><small>Facts</small><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></div>
- <div class="c"><small>Usage · ${esc(a.plan.name)}${custom ? " + custom" : ""}</small>${usage}</div>
+ <div class="c"><small>Usage${custom ? " · custom limit" : ""}</small>${usage}</div>
 </div>
 <div class="c sec"><small>Devices</small><ul class="devs">${devices}</ul></div>
 <div class="c sec"><small>Recent admin actions</small>${auditList(audit, false)}</div>
@@ -239,87 +224,22 @@ ${dialogs}`,
   );
 }
 
-function planCard(p: Plan, others: Plan[]): string {
-  const mib = +(p.limits.bytes / MiB).toFixed(2);
-  const fields = (v: Plan | null) => `
-<label>Name<input name="name" value="${esc(v?.name ?? "")}" required maxlength="40" autocomplete="off"></label>
-${numField("bytes", "Storage (MB)", v ? v.limits.bytes : null, "e.g. 50", MiB, true)}
-${numField("items", "Items", v ? v.limits.items : null, "e.g. 100000", undefined, true)}
-${numField("devices", "Devices", v ? v.limits.devices : null, "blank = unlimited")}`;
-  const moveOpts = others.filter((o) => !o.archived && o.id !== p.id).map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("");
-  const archiveInner =
-    p.accounts > 0
-      ? `<p>${fmtInt(p.accounts)} account${p.accounts === 1 ? " uses" : "s use"} this plan. Move ${p.accounts === 1 ? "it" : "them"} first:</p><label>Move accounts to<select name="move_to" data-type="str">${moveOpts}</select></label>`
-      : `<p>No accounts use this plan. It stays in the list as archived.</p>`;
-  const dialogs = p.archived
-    ? ""
-    : dialog(`e-${p.id}`, `Edit ${p.name}`, `${fields(p)}<p class="soft">Changes apply to everyone on this plan immediately.</p>`, {
-        api: `/api/plans/${p.id}`, method: "PUT", done: "reload", submit: "Save plan",
-      }) +
-      dialog(`f-${p.id}`, `Make ${p.name} the default`, `<p>New sign-ups get ${esc(p.name)}. Existing accounts keep their plan.</p>`, {
-        api: `/api/plans/${p.id}/default`, method: "POST", done: "reload", submit: "Make default",
-      }) +
-      dialog(`a-${p.id}`, `Archive ${p.name}`, archiveInner, { api: `/api/plans/${p.id}/archive`, method: "POST", done: "reload", submit: "Archive", bad: true });
-  const actions = p.archived
-    ? ""
-    : `<div class="acts three"><button class="btn" data-open="e-${esc(p.id)}">Edit</button><button class="btn" data-open="f-${esc(p.id)}"${p.default ? " disabled" : ""}>Make default</button><button class="btn" data-open="a-${esc(p.id)}"${p.default ? ' disabled title="Make another plan the default first"' : ""}>Archive</button></div>`;
-  return `<div class="c plan${p.archived ? " arch" : ""}"><div class="ph"><h3>${esc(p.name)} <span class="mono soft">${esc(p.id)}</span></h3><span>${p.default ? '<span class="pill on">Default</span>' : ""}${p.archived ? '<span class="pill">Archived</span>' : ""}</span></div>
-<p class="lim">${esc(mib)} MB · ${fmtInt(p.limits.items)} items · ${p.limits.devices === null ? "unlimited devices" : `${p.limits.devices} devices`}</p>
-<a class="soft" href="/accounts?filter=plan:${esc(p.id)}">${fmtInt(p.accounts)} account${p.accounts === 1 ? "" : "s"}</a>${actions}</div>${dialogs}`;
-}
-
-export function renderPlans(ctx: Ctx, plans: Plan[]): string {
-  const newFields = `<label>Id<input name="id" required pattern="[a-z0-9][a-z0-9-]{1,30}" placeholder="team" autocomplete="off" data-type="str"></label>
-<label>Name<input name="name" required maxlength="40" placeholder="Team" autocomplete="off"></label>
-${numField("bytes", "Storage (MB)", null, "e.g. 50", MiB, true)}
-${numField("items", "Items", null, "e.g. 100000", undefined, true)}
-${numField("devices", "Devices", null, "blank = unlimited")}`;
-  return layout(
-    ctx,
-    "plans",
-    "Plans",
-    `<div class="hd"><h1>Plans</h1><button class="btn pri" data-open="d-new">New plan</button></div>
-<div class="plans">${plans.map((p) => planCard(p, plans)).join("\n")}</div>
-${dialog("d-new", "New plan", newFields, { api: "/api/plans", method: "POST", done: "reload", submit: "Create plan" })}`,
-  );
-}
-
 const ACTIONS: Record<string, string> = {
-  change_plan: "Changed plan",
-  custom_limits: "Set custom limits",
+  custom_limits: "Set storage limit",
   sign_out_all: "Signed out all devices",
   reset_two_step: "Reset two-step",
   suspend: "Suspended",
   unsuspend: "Unsuspended",
   delete_account: "Deleted account",
-  create_plan: "Created plan",
-  edit_plan: "Edited plan",
-  default_plan: "Made plan default",
-  archive_plan: "Archived plan",
-  add_invite: "Invited",
-  remove_invite: "Removed invite",
 };
 
 function detailText(a: AuditRow): string {
   const d = a.detail;
-  const lim = (k: string) => (d[k] === null || d[k] === undefined ? "plan" : k === "bytes" ? fmtBytes(Number(d[k])) : String(d[k]));
   switch (a.action) {
-    case "change_plan":
-      return `${d.from} → ${d.to}`;
     case "custom_limits":
-      return `storage ${lim("bytes")}, items ${lim("items")}, devices ${lim("devices")}`;
+      return `storage ${d.bytes === null || d.bytes === undefined ? "server default" : fmtBytes(Number(d.bytes))}`;
     case "sign_out_all":
       return `${d.devices} device${d.devices === 1 ? "" : "s"}`;
-    case "create_plan":
-    case "edit_plan":
-      return `${d.plan}: ${fmtBytes(Number(d.bytes))}, ${d.items} items, ${d.devices ?? "unlimited"} devices`;
-    case "default_plan":
-      return String(d.plan);
-    case "archive_plan":
-      return `${d.plan}${d.to ? `, ${d.moved} moved to ${d.to}` : ""}`;
-    case "add_invite":
-    case "remove_invite":
-      return String(d.email ?? "");
     default:
       return "";
   }
@@ -333,44 +253,6 @@ function auditList(rows: AuditRow[], withAccount = true): string {
       return `<li><div><b>${esc(ACTIONS[a.action] ?? a.action)}</b>${who ? ` · ${who}` : ""}<span class="soft">${esc(detailText(a))}</span></div><small>${esc(fmtDateTime(a.at))} · ${esc(a.admin)}</small></li>`;
     })
     .join("")}</ul>`;
-}
-
-const INVITE_NOTE: Record<Signups, string> = {
-  invite: "Only these emails can create an account on this server.",
-  open: "Sign-ups are open (SIGNUPS=open): anyone can create an account. This list only applies with SIGNUPS=invite.",
-  closed: "Sign-ups are closed (SIGNUPS=closed): nobody can create an account, invited or not.",
-};
-
-export function renderInvites(ctx: Ctx, invites: Invite[]): string {
-  const rows = invites.length
-    ? `<ul class="invs">${invites
-        .map((v, i) => {
-          const status = v.userId
-            ? `<a class="pill on" href="/accounts/${esc(v.userId)}">Joined ${esc(fmtDate(v.joinedAt))}</a>`
-            : '<span class="pill">Not joined yet</span>';
-          return `<li><div class="iv"><span class="em">${esc(v.email)}</span><small class="soft">Invited ${esc(fmtDate(v.createdAt))} by ${esc(v.createdBy)}</small></div>
-<span class="ia">${status}<button class="btn mini" data-open="r-${i}">Remove</button></span>
-${dialog(`r-${i}`, "Remove invite", `<p>${esc(v.email)} can no longer create an account. An account already made is not affected.</p><input type="hidden" name="email" value="${esc(v.email)}">`, {
-  api: "/api/invites", method: "DELETE", done: "reload", submit: "Remove", bad: true,
-})}</li>`;
-        })
-        .join("\n")}</ul>`
-    : `<p class="empty">No invites yet. Invite the people who should have an account here.</p>`;
-  return layout(
-    ctx,
-    "invites",
-    "Invites",
-    `<div class="hd"><h1>Invites</h1><button class="btn pri" data-open="d-invite">Invite</button></div>
-<p class="note${ctx.signups === "invite" ? "" : " w"}">${esc(INVITE_NOTE[ctx.signups])}</p>
-<div class="list">${rows}</div>
-${dialog(
-  "d-invite",
-  "Invite someone",
-  `<label>Email<input name="email" type="email" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="name@example.com"></label>
-<p class="soft">They create the account in the Tessh app with this email. Nothing is sent: tell them the server address yourself.</p>`,
-  { api: "/api/invites", method: "POST", done: "reload", submit: "Add invite" },
-)}`,
-  );
 }
 
 export function renderAudit(ctx: Ctx, rows: AuditRow[], userId: string | null): string {
@@ -457,7 +339,6 @@ input:focus-visible,select:focus-visible,.btn:focus-visible,a:focus-visible{outl
 .bad-t{color:var(--bad)}
 .pill{font-size:10.5px;padding:2px 7px;border-radius:6px;background:#ffffff10;color:var(--mut);white-space:nowrap}
 .pill.on{background:#4ade8020;color:var(--ok)}
-.pill.pro{background:#3b82f626;color:#93c5fd}
 .pill.bad{background:#f8717118;color:var(--bad)}
 .meter{width:46px;height:5px;border-radius:3px;background:#ffffff12;display:inline-block;vertical-align:middle;margin-right:5px;overflow:hidden}
 .meter.wide{display:block;width:100%;margin:4px 0 8px}
@@ -466,7 +347,6 @@ input:focus-visible,select:focus-visible,.btn:focus-visible,a:focus-visible{outl
 ${steps("w", "width")}
 .drw h3{margin:0 0 2px;font-size:14px;font-weight:500;overflow-wrap:anywhere}
 .acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}
-.acts.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .btn{padding:9px 10px;border-radius:9px;background:#ffffff10;font:inherit;font-size:12.5px;text-align:center;color:var(--ink);border:0;cursor:pointer}
 .btn:hover:not([disabled]){background:#ffffff1f;color:var(--ink)}
 .btn[disabled]{opacity:.4;cursor:default}
@@ -493,11 +373,6 @@ ${steps("w", "width")}
 .audit li div .soft{margin-left:8px}
 .audit a{color:#93c5fd}
 .audit small{color:var(--soft)}
-.plans{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-.plan.arch{opacity:.55}
-.ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.ph h3{margin:0;font-size:14px;font-weight:500}
-.lim{margin:6px 0 4px;color:var(--ink)}
 .zk{margin-top:14px;font-size:11.5px;color:var(--soft)}
 .zk b{color:#93c5fd;font-weight:500}
 dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:0;width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
@@ -517,12 +392,6 @@ dialog[open]{animation:pop .22s cubic-bezier(.2,.9,.3,1.2)}
 .nf{padding:40px 20px}
 .note{margin:0 0 10px;color:var(--mut)}
 .note.w{color:var(--warn)}
-.invs{list-style:none;margin:0;padding:0}
-.invs li{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:11px 12px;border-bottom:1px solid var(--line)}
-.invs li:last-child{border-bottom:0}
-.iv{display:flex;flex-direction:column;gap:2px;min-width:0}
-.iv .em{font-weight:500;overflow-wrap:anywhere}
-.ia{display:flex;align-items:center;gap:8px}
 .btn.mini{padding:5px 10px;font-size:12px}
 .nf a{color:#93c5fd}
 @media (max-width:560px){
@@ -540,8 +409,6 @@ dialog[open]{animation:pop .22s cubic-bezier(.2,.9,.3,1.2)}
  .c .v{font-size:20px}
  .row2,.grid2{grid-template-columns:minmax(0,1fr);gap:8px}
  .bars{height:52px}
- .acts.three{grid-template-columns:repeat(2,minmax(0,1fr))}
- .acts.three .btn:last-child{grid-column:1/-1}
 }
 `;
 

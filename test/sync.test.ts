@@ -119,7 +119,7 @@ describe("sync", () => {
 
   it("push over quota is rejected whole", async () => {
     const { token, userId } = await registerUser("s8@x.com");
-    await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 5242800)")
+    await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 1073741800)")
       .bind(userId, uuid()).run();
     await env.DB.prepare("UPDATE users SET cursor = 1 WHERE id = ?").bind(userId).run();
     const a = item("A".repeat(100)), b = item("B".repeat(100));
@@ -135,7 +135,7 @@ describe("sync", () => {
   it("replacing an item credits its old size against the quota", async () => {
     const { token, userId } = await registerUser("s9@x.com");
     const id = uuid();
-    await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 5242800)")
+    await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 1073741800)")
       .bind(userId, id).run();
     await env.DB.prepare("UPDATE users SET cursor = 1 WHERE id = ?").bind(userId).run();
     expect((await push(token, [{ id, deleted: false, blob: "A".repeat(1000) }])).status).toBe(200);
@@ -144,9 +144,9 @@ describe("sync", () => {
   it("item count limit counts tombstones", async () => {
     const { token, userId } = await registerUser("s10@x.com");
     await env.DB.prepare(
-      "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 10000) INSERT INTO items (user_id, id, version, deleted, blob, size) SELECT ?, 'id' || i, i, 1, NULL, 0 FROM n",
+      "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 100000) INSERT INTO items (user_id, id, version, deleted, blob, size) SELECT ?, 'id' || i, i, 1, NULL, 0 FROM n",
     ).bind(userId).run();
-    await env.DB.prepare("UPDATE users SET cursor = 10000 WHERE id = ?").bind(userId).run();
+    await env.DB.prepare("UPDATE users SET cursor = 100000 WHERE id = ?").bind(userId).run();
     const res = await push(token, [item()]);
     expect(res.status).toBe(413);
     expect(((await res.json()) as any).error).toBe("quota_exceeded");
@@ -224,7 +224,7 @@ describe("sync", () => {
 
   it("the in-batch guard rejects an over-quota write even when the pre-check is bypassed", async () => {
     const { userId } = await registerUser("s20@x.com");
-    await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 5242800)")
+    await env.DB.prepare("INSERT INTO items (user_id, id, version, deleted, blob, size) VALUES (?, ?, 1, 0, 'x', 1073741800)")
       .bind(userId, uuid()).run();
     await env.DB.prepare("UPDATE users SET cursor = 1 WHERE id = ?").bind(userId).run();
     const items = [{ id: uuid(), deleted: false, blob: "A".repeat(100), size: 100 }];
@@ -238,7 +238,7 @@ describe("sync", () => {
   it("the in-batch guard enforces the item count limit", async () => {
     const { userId } = await registerUser("s21@x.com");
     await env.DB.prepare(
-      "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 10000) INSERT INTO items (user_id, id, version, deleted, blob, size) SELECT ?, 'id' || i, i, 1, NULL, 0 FROM n",
+      "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 100000) INSERT INTO items (user_id, id, version, deleted, blob, size) SELECT ?, 'id' || i, i, 1, NULL, 0 FROM n",
     ).bind(userId).run();
     await expect(
       writeItems(env as any, userId, [{ id: uuid(), deleted: true, blob: null, size: 0 }]),

@@ -69,13 +69,13 @@ describe("node:http server", () => {
 
   it("admin writes check the origin the browser used, as a reverse proxy forwards it", async () => {
     const send = (origin: string, extra: Record<string, string> = {}) =>
-      fetch(`${admin}/api/invites`, {
+      fetch(`${admin}/api/accounts/6f1c1e0a-0000-4000-8000-000000000000/suspend`, {
         method: "POST",
         headers: { authorization: auth(), "x-tessh-admin": "1", "content-type": "application/json", origin, ...extra },
-        body: JSON.stringify({ email: "alice@example.com" }),
+        body: "{}",
       });
     expect((await send("https://evil.example")).status).toBe(403);
-    expect((await send("https://admin.example.com", { "x-forwarded-proto": "https", "x-forwarded-host": "admin.example.com" })).status).toBe(201);
+    expect((await send("https://admin.example.com", { "x-forwarded-proto": "https", "x-forwarded-host": "admin.example.com" })).status).toBe(404);
   });
 
   it("writes the database and secrets to DATA_DIR", async () => {
