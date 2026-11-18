@@ -324,7 +324,7 @@ export function renderOverview(ctx: PanelContext, o: Overview, x: OverviewExtras
                 )}</small></div>${ctx.now - Date.parse(d.lastSeenAt) < 10 * MIN ? `<span class="r"><span class="livedot" aria-label="Active now"></span></span>` : ""}</div>`,
             )
             .join("")
-        : `<div class="row calm"><span class="ri">${icons.laptop}</span><div class="t"><b>No devices signed in</b><small>Sign in from the Tessh app with your account.</small></div></div>`;
+        : `<div class="row calm"><span class="ri">${icons.laptop}</span><div class="t"><b>No devices signed in</b><small>Sign in from the Tessh app with your Tessh account.</small></div></div>`;
       middle = `${cap("Your devices", ["/admin/devices", "Manage"])}<div class="rows">${rows}</div>`;
     }
   } else {
@@ -555,7 +555,7 @@ export function renderSettings(ctx: PanelContext, owner: { email: string; totp: 
 </div>
 <div class="h">You</div>
 <div class="rows">
-<div class="srow"><div><b>Owner login</b><small>${esc(owner.email)}</small></div><div class="btns">${totp}<button type="button" class="btn ghost sm" data-open="password">Change password</button>${
+<div class="srow"><div><b>Admin login</b><small>${esc(owner.email)}</small></div><div class="btns">${totp}<button type="button" class="btn ghost sm" data-open="password">Change password</button>${
     sessions.length > 1 ? action("Sign out other sessions", { method: "POST", path: "/admin/api/owner/sessions/end-others" }) : ""
   }</div></div>
 ${sessionRows}

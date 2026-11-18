@@ -74,19 +74,6 @@
     });
   }
 
-  // ---- Show my code: reveals a value kept hidden until asked for ----
-  $$('[data-reveal]').forEach((b) => {
-    const target = document.getElementById(b.dataset.reveal);
-    if (!target) return;
-    const label = b.textContent;
-    b.addEventListener('click', () => {
-      const show = target.hidden;
-      target.hidden = !show;
-      b.setAttribute('aria-expanded', String(show));
-      b.textContent = show ? 'Hide my code' : label;
-    });
-  });
-
   // ---- Storage bars ----
   $$('[data-pct]').forEach((i) => { i.style.width = Math.max(0, Math.min(100, Number(i.dataset.pct))) + '%'; });
 

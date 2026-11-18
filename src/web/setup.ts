@@ -204,7 +204,7 @@ async function postTeam(req: Request, env: Env): Promise<Response> {
   // From here to finishing is synchronous, so two requests can't both finish setup.
   requireUnlocked(env, req);
   if (modeOf(env) !== "full") throw notFound();
-  if (!ownerExists(env)) throw new HttpError("conflict", 409, "Make the owner login first");
+  if (!ownerExists(env)) throw new HttpError("conflict", 409, "Make the admin login first");
   if (!locked.signups) saveSetting(env, "signups", signups);
   saveSetting(env, "default_bytes", String(solo ? -1 : bytes));
   const origin = originFor(req, env);
@@ -288,13 +288,13 @@ function ownerStep(env: Env, mode: Mode): string {
     mode === "owner"
       ? `<section class="ocard" data-done hidden>${MARK}
 <h3>You can sign in again</h3>
-<p class="sub">Your owner login is reset. Sign in with the new one.</p>
+<p class="sub">Your admin login is reset. Sign in to this page with the new one.</p>
 <div class="acts"><a class="btn primary grow" href="/admin">Open the panel</a></div>
 </section>`
       : "";
   return `<form class="ocard" data-step="owner" data-mode="${mode}" novalidate>${MARK}${dots(mode, "owner")}
-<h3>Owner login</h3>
-<p class="sub">For running this server: people, invites and settings.</p>
+<h3>Admin login</h3>
+<p class="sub">For running this server: people, invites and settings. This is your admin login for this page. Your apps use a separate Tessh account.</p>
 <div class="fg">
 <div class="fr"><label for="email">Email</label><input id="email" name="email" type="email" required autocomplete="username" spellcheck="false" placeholder="you@example.com"></div>
 <div class="fr"><label for="password">Password</label><input id="password" name="password" type="password" required minlength="12" autocomplete="new-password" placeholder="At least 12 characters"><span class="okt" data-strength hidden><i></i><span></span></span></div>
@@ -360,7 +360,7 @@ ${ERR}
 <div class="rows for-team" data-invites hidden></div>
 <div class="lbl for-team">Your own apps</div>
 <div class="lbl for-solo">Connect your apps</div>
-${connectBlock(host, null)}
+${connectBlock(host, null, `<button type="button" class="btn ghost sm" data-copy="" data-owner-copy>${icons.copy}<span>Copy</span></button>`)}
 <div class="acts"><a class="btn primary grow" href="/admin">Open the panel</a></div>
 </section>
 <template data-invite-row><div class="row"><span class="who"></span><div class="t"><b></b><small></small></div><span class="r"><button type="button" class="btn ghost sm" data-copy>${icons.copy}<span>Copy</span></button></span></div></template>`;
@@ -373,7 +373,7 @@ function render(req: Request, env: Env, mode: Mode): string {
   const card =
     step === "code" ? codeStep(mode, env) : step === "server" ? serverStep(req, env, mode) : step === "owner" ? ownerStep(env, mode) : teamStep(req, env);
   return page({
-    title: mode === "owner" ? "Reset the owner login · Tessh Server" : "Set up · Tessh Server",
+    title: mode === "owner" ? "Reset the admin login · Tessh Server" : "Set up · Tessh Server",
     body: `<main class="moment"><canvas data-field="moment" aria-hidden="true"></canvas>${card}</main>`,
     script: "setup",
   });

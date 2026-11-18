@@ -324,7 +324,6 @@ input.fieldi{width:100%;outline:0;color:var(--ink)}
 .connect .t b{font:500 14px var(--sans)}
 .connect p{margin:4px 0 12px;color:var(--muted);font-size:13px}.connect p b{display:inline;font:inherit;color:var(--ink2)}
 .connect .soft{margin:0}
-.code-out{max-width:320px}.code-out code.key{font-size:15px}
 .srow .cmd{margin-top:0;min-width:0}
 .srow .cmd code{font:12.5px var(--mono);color:var(--ink2)}
 .cap.note a{color:var(--ink2)}

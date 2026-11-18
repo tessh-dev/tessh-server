@@ -134,7 +134,7 @@ describe("browser setup", () => {
     expect(settingRow(env, "public_url")).toBe("https://sync.example.com");
 
     const ownerPage = await b.html();
-    expect(ownerPage).toContain("Owner login");
+    expect(ownerPage).toContain("Admin login");
     // A QR code first; the key to type in is folded behind "Can't scan?", with a copy button and the link.
     expect(ownerPage).toContain("Scan this with your authenticator app, then type the code it shows.");
     expect(ownerPage).toMatch(/<div class="qr" data-qr><\/div>\s*<details class="where manual"><summary>[\s\S]*Can't scan\? Enter the key instead[\s\S]*data-secret[\s\S]*data-copy-secret[\s\S]*data-uri[\s\S]*<\/details>\s*<div class="otp-box" id="totp"/);
@@ -169,6 +169,7 @@ describe("browser setup", () => {
     const out = (await done.json()) as { invites: { label: string; url: string }[]; ownerCode: string; ownerLink: string; ownerQR: string };
     expect(out.ownerLink).toMatch(/^tessh:\/\/join\?server=/);
     expect(out.ownerLink).toContain(`code=${out.ownerCode}`);
+    expect(out.ownerLink).toContain(`email=${encodeURIComponent("owner@example.com")}`);
     expect(out.ownerQR.startsWith("<svg")).toBe(true);
     expect(out.invites.map((i) => i.label)).toEqual(["Sam", "Priya"]);
     for (const i of out.invites) expect(i.url).toMatch(/^https:\/\/sync\.example\.com\/join\/[A-Za-z0-9]{6}$/);
@@ -336,7 +337,7 @@ describe("browser setup", () => {
     expect(env.SETTINGS.name).toBe("Env Lab");
     expect(settingRow(env, "name")).toBeNull();
     expect(settingRow(env, "public_url")).toBe("https://sync.example.com");
-    expect(await b.html()).toContain("Owner login");
+    expect(await b.html()).toContain("Admin login");
   });
 
   it("resumes at the owner step after a restart", async () => {
@@ -352,7 +353,7 @@ describe("browser setup", () => {
     expect(await b2.html()).toContain("Set up your server");
     await unlock(b2, code2);
     const page = await b2.html();
-    expect(page).toContain("Owner login");
+    expect(page).toContain("Admin login");
     expect(page).not.toContain("Your server");
   });
 
@@ -376,7 +377,7 @@ describe("browser setup", () => {
     expect(codePage.match(/<i(?: class="on")?><\/i>/g)).toHaveLength(2);
     await unlock(b, code);
     const page = await b.html();
-    expect(page).toContain("Owner login");
+    expect(page).toContain("Admin login");
     expect(page).toContain("You can sign in again");
     for (const s of ["Your server", "Your team"]) expect(page).not.toContain(s);
     expect((await b.post("/setup/api/server", { name: "X", address: "https://x.example.com" })).status).toBe(404);
