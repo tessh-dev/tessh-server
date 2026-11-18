@@ -249,7 +249,7 @@ describe("panel layout by mode", () => {
     const settings = await (await panel("GET", "/admin/settings")).text();
     expect(settings).not.toContain('data-dialog="backup"');
     expect(settings).not.toContain("docker compose pull");
-    expect(settings).toContain('<a href="/admin/maintenance">Maintenance</a>');
+    expect(settings).not.toContain("are in <a href");
   });
 });
 

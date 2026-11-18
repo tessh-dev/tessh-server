@@ -523,8 +523,7 @@ ${sessionRows}
 <div class="h">This browser</div>
 <div class="rows">
 <div class="srow"><div><b>Appearance</b><small>Only the panel, only here</small></div><div>${appearance}</div></div>
-</div>
-<p class="cap note">Backups and updates are in <a href="/admin/maintenance">Maintenance</a>.</p>`;
+</div>`;
   const pw = (id: string, label: string, auto: string, extra = "") =>
     `<div class="fr"><label for="${id}">${label}</label><input id="${id}" type="password" required autocomplete="${auto}"${extra}></div>`;
   const dialogs = `
