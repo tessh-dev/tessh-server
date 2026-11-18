@@ -66,9 +66,28 @@ describe("reset-owner", () => {
     // Members keep syncing; only /setup serves the owner flow.
     const account = await handle(new Request("http://x.test/v1/account"), app.env);
     expect(account.status).toBe(401);
-    const setup = await handle(new Request("http://x.test/setup", { headers: { accept: "text/html" } }), app.env);
-    expect(setup.status).toBe(200);
-    expect(await setup.text()).not.toContain("Your server");
+    const base = "http://x.test";
+    const code = /Setup code {2}([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(logs.join("\n"))![1];
+    const codePage = await handle(new Request(`${base}/setup`, { headers: { accept: "text/html" } }), app.env);
+    expect(codePage.status).toBe(200);
+    expect(await codePage.text()).toContain("Set up your server");
+    const post = (path: string, body: unknown, cookie = "") =>
+      handle(
+        new Request(`${base}${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-tessh-owner": "1", origin: base, cookie, "x-tessh-client-ip": "1.1.1.1" },
+          body: JSON.stringify(body),
+        }),
+        app.env,
+      );
+    const unlocked = await post("/setup/api/code", { code });
+    expect(unlocked.status).toBe(200);
+    const cookie = unlocked.headers.getSetCookie()[0].split(";")[0];
+    const owner = await handle(new Request(`${base}/setup`, { headers: { accept: "text/html", cookie } }), app.env);
+    const html = await owner.text();
+    expect(html).toContain('data-step="owner"');
+    expect(html).not.toContain("Your server");
+    expect((await post("/setup/api/server", { name: "X", address: "https://x.example.com" }, cookie)).status).toBe(404);
   });
 
   it("an unfinished setup keeps its normal code and just drops the flag", async () => {

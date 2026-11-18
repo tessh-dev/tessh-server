@@ -203,6 +203,47 @@
     });
   }
 
+  // ---- Backup download: confirm with the password, then save the file the server sends ----
+  $$('form[data-download]').forEach((form) => {
+    const err = $('.err', form);
+    const submit = $('button[type=submit]', form);
+    form.addEventListener('submit', async (e) => {
+      if (e.submitter && e.submitter.value === 'cancel') return;
+      e.preventDefault();
+      err.hidden = true;
+      submit.disabled = true;
+      try {
+        const res = await fetch(form.dataset.download, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'x-tessh-owner': '1' },
+          body: JSON.stringify(formBody(form)),
+        });
+        if (!res.ok) {
+          let data = {};
+          try { data = await res.json(); } catch (x) { data = {}; }
+          throw new Error(data.message || 'Something went wrong. Try again.');
+        }
+        const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '');
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name ? name[1] : 'tessh-backup.db';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        form.closest('dialog').close();
+        say('Backup downloaded');
+      } catch (x) {
+        err.textContent = x.message;
+        err.hidden = false;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  });
+
   // ---- Dialogs ----
   function openDialog(name) {
     const d = $(`dialog[data-dialog="${name}"]`);

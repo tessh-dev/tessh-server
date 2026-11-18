@@ -1,8 +1,9 @@
 // The owner's panel at /admin: Overview, Team, Invites, Activity and Settings, plus its JSON API under
 // /admin/api/. Every page and call needs an owner session (src/owner.ts); writes also need the panel header and
 // a same-origin request, and every change is written to the audit log under the owner's email.
-// Zero-knowledge: only names, emails, usernames, device names, counts, sizes and dates leave here. Never vault
-// data, keys, hashes, salts or auth data.
+// Zero-knowledge: only names, emails, usernames, device names, counts, sizes and dates leave here. The panel never
+// shows vault data, keys, hashes, salts or auth data. The one exception is the owner's full backup download, which
+// is the whole database and so needs the owner's password (and authenticator code) again.
 import { deleteUserStatements } from "../accounts.ts";
 import { backupBytes, dateStamp } from "../backup.ts";
 import { normalisePublicURL, type Signups } from "../config.ts";
@@ -13,6 +14,7 @@ import { LIMIT_SQL, NO_LIMIT } from "../limits.ts";
 import {
   changeOwnerPassword,
   checkWrite,
+  confirmOwner,
   confirmTotp,
   disableTotp,
   endOtherSessions,
@@ -392,11 +394,16 @@ async function removeInvite(env: Env, actor: string, code: string): Promise<Resp
   return json({ ok: true });
 }
 
-async function downloadBackup(env: Env, actor: string, head: boolean): Promise<Response> {
+/** The whole database, after the owner confirms with their password (and code). It holds every account's hashes and wrapped keys. */
+async function downloadBackup(req: Request, env: Env, actor: string, b: Record<string, unknown>): Promise<Response> {
+  await confirmOwner(env, req, { password: b.password, code: b.code });
+  const file = backupBytes(env);
   await audit(env, actor, "backup.download", null).run();
-  return new Response(head ? null : backupBytes(env), {
+  return new Response(file, {
     headers: {
       "content-type": "application/octet-stream",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
       "content-disposition": `attachment; filename="tessh-backup-${dateStamp(new Date())}.db"`,
     },
   });
@@ -469,7 +476,6 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
     if (path === "overview") return json(await overview(env, host));
     if (path === "team") return json({ people: await people(env, host) });
     if (path === "activity") return json({ events: await activity(env, await activityUser(env, url)) });
-    if (path === "backup") return downloadBackup(env, (await ownerInfo(env))?.email ?? "owner", m === "HEAD");
     throw notFound();
   }
   const actor = (await ownerInfo(env))?.email ?? "owner";
@@ -495,6 +501,8 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
   switch (path) {
     case "settings":
       return saveSettings(env, actor, b);
+    case "backup":
+      return downloadBackup(req, env, actor, b);
     case "owner/password":
       await changeOwnerPassword(env, req, tokenHash, str(b.current), str(b.next));
       await audit(env, actor, "owner_password", null).run();

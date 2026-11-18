@@ -237,6 +237,40 @@ export async function disableTotp(env: Env, req: Request, password: string): Pro
   await env.DB.prepare("UPDATE owner SET totp_secret = NULL, totp_last_step = NULL, updated_at = ? WHERE id = 1").bind(new Date().toISOString()).run();
 }
 
+/**
+ * Re-checks the owner before something sensitive: the password and, when the authenticator is on, a fresh code.
+ * Wrong answers count against the caller's address like sign-in does (429 when there are too many).
+ */
+export async function confirmOwner(env: Env, req: Request, input: { password: unknown; code?: unknown }): Promise<void> {
+  const refund = reserve(limitKey(clientIP(req)));
+  let failed = false;
+  try {
+    const owner = await loadOwner(env);
+    if (!owner) throw unauthorized();
+    if (!(await verifyPassword(typeof input.password === "string" ? input.password : "", owner.password_hash))) {
+      failed = true;
+      throw new HttpError("invalid_credentials", 401, "Wrong password");
+    }
+    if (owner.totp_secret) {
+      const code = typeof input.code === "string" ? input.code.replace(/\s/g, "") : "";
+      // Not a failure: the password was right, the page just has to ask for the code.
+      if (!code) throw new HttpError("code_required", 401, "Enter the code from your authenticator");
+      const secret = await open(env.TOTP_KEY, "owner", owner.totp_secret);
+      const step = await matchStep(secret, code, Date.now(), owner.totp_last_step);
+      const used =
+        step === null
+          ? null
+          : await env.DB.prepare("UPDATE owner SET totp_last_step = ? WHERE id = 1 AND (totp_last_step IS NULL OR totp_last_step < ?)").bind(step, step).run();
+      if (used === null || used.meta.changes !== 1) {
+        failed = true;
+        throw new HttpError("invalid_code", 401, "Invalid code");
+      }
+    }
+  } finally {
+    if (!failed) refund();
+  }
+}
+
 /** Changes the owner password after checking the current one, and ends every other session. */
 export async function changeOwnerPassword(env: Env, req: Request, keepHash: string, current: string, next: string): Promise<void> {
   checkPassword(next);

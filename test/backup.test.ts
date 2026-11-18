@@ -2,9 +2,10 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { backupBytes, msUntilNightly, runBackup, scheduleBackups } from "../src/backup.ts";
 import { createOwner, resetOwnerAttempts } from "../src/owner.ts";
+import { seal, stepAt, totpAt } from "../src/totp.ts";
 import { SELF, env, makeEnv } from "./harness.ts";
 
 const dirs: string[] = [];
@@ -81,33 +82,85 @@ describe("backups", () => {
 
 describe("backup download", () => {
   const BASE = "https://keys.test";
-  it("needs the owner session, streams the file and is audited", async () => {
-    expect((await SELF.fetch(`${BASE}/admin/api/backup`)).status).toBe(401);
-    await createOwner(env, "owner@example.com", "a long enough password");
+  const PW = "a long enough password";
+  let cookie = "";
+  const post = (body: unknown, c: string | null = cookie, ip = "10.0.0.8") =>
+    SELF.fetch(`${BASE}/admin/api/backup`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-tessh-owner": "1", origin: BASE, "x-tessh-client-ip": ip, ...(c ? { cookie: c } : {}) },
+      body: JSON.stringify(body),
+    });
+  const page = async (path: string) => (await SELF.fetch(`${BASE}${path}`, { headers: { cookie } })).text();
+  const audits = () => env.DB.prepare("SELECT actor FROM admin_audit WHERE action = 'backup.download'").execSync<{ actor: string }>().results;
+
+  beforeAll(async () => {
+    await createOwner(env, "owner@example.com", PW);
     resetOwnerAttempts();
     const login = await SELF.fetch(`${BASE}/admin/login`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-tessh-owner": "1", origin: BASE, "x-tessh-client-ip": "10.0.0.8" },
-      body: JSON.stringify({ email: "owner@example.com", password: "a long enough password" }),
+      headers: { "content-type": "application/json", "x-tessh-owner": "1", origin: BASE, "x-tessh-client-ip": "10.0.0.7" },
+      body: JSON.stringify({ email: "owner@example.com", password: PW }),
     });
-    const cookie = login.headers.get("set-cookie")!.split(";")[0];
-    const res = await SELF.fetch(`${BASE}/admin/api/backup`, { headers: { cookie } });
+    cookie = login.headers.get("set-cookie")!.split(";")[0];
+  });
+  beforeEach(() => resetOwnerAttempts());
+
+  it("is POST only and needs the owner session", async () => {
+    expect((await post({ password: PW }, null)).status).toBe(401);
+    expect((await SELF.fetch(`${BASE}/admin/api/backup`, { headers: { cookie } })).status).toBe(404);
+    expect((await SELF.fetch(`${BASE}/admin/api/backup`, { method: "POST", headers: { cookie, "x-tessh-owner": "1" }, body: "{}" })).status).toBeGreaterThanOrEqual(400);
+    expect(audits()).toEqual([]);
+  });
+
+  it("refuses a wrong or missing password without auditing, and rate limits wrong ones", async () => {
+    expect((await post({ password: "nope nope nope" })).status).toBe(401);
+    expect((await post({})).status).toBe(401);
+    expect(audits()).toEqual([]);
+    let last = 0;
+    for (let i = 0; i < 12 && last !== 429; i++) last = (await post({ password: "nope nope nope" }, cookie, "10.0.0.99")).status;
+    expect(last).toBe(429);
+    expect(audits()).toEqual([]);
+  });
+
+  it("streams the file with safe headers once the password is right, and audits it", async () => {
+    const res = await post({ password: PW });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/octet-stream");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="tessh-backup-\d{4}-\d{2}-\d{2}\.db"$/);
     expect(Buffer.from(await res.arrayBuffer()).subarray(0, 15).toString()).toBe("SQLite format 3");
-    const rows = env.DB.prepare("SELECT actor FROM admin_audit WHERE action = 'backup.download'").execSync<{ actor: string }>().results;
-    expect(rows).toEqual([{ actor: "owner@example.com" }]);
-    const settings = await (await SELF.fetch(`${BASE}/admin/settings`, { headers: { cookie } })).text();
+    expect(audits()).toEqual([{ actor: "owner@example.com" }]);
+  });
+
+  it("asks for the authenticator code when it is on", async () => {
+    const secret = new Uint8Array(20).fill(5);
+    const sealed = await seal(env.TOTP_KEY, "owner", secret);
+    env.DB.prepare("UPDATE owner SET totp_secret = ?, totp_last_step = NULL").bind(sealed).execSync();
+    try {
+      const before = audits().length;
+      const need = await post({ password: PW });
+      expect([need.status, ((await need.json()) as any).error]).toEqual([401, "code_required"]);
+      expect((await post({ password: PW, code: "000000" })).status).toBe(401);
+      expect(await page("/admin/settings")).toContain('id="backup-code"');
+      const ok = await post({ password: PW, code: await totpAt(secret, stepAt(Date.now())) });
+      expect(ok.status).toBe(200);
+      expect(audits()).toHaveLength(before + 1);
+    } finally {
+      env.DB.prepare("UPDATE owner SET totp_secret = NULL, totp_last_step = NULL").bind().execSync();
+    }
+  });
+
+  it("shows the Backups row, the dialog and the update state", async () => {
+    const settings = await page("/admin/settings");
+    expect(settings).toContain('data-open="backup"');
     expect(settings).toContain("Download a backup");
     expect(settings).toContain("Nightly at 03:00 into the data volume");
-
-    // The update check's answer shows on Overview and Settings.
-    const page = async (path: string) => (await SELF.fetch(`${BASE}${path}`, { headers: { cookie } })).text();
+    expect(settings).not.toContain("/admin/api/backup\" download");
     expect(await page("/admin")).not.toContain("Up to date");
     env.UPDATE_CHECK = true;
     expect(await page("/admin")).toContain("Up to date");
-    expect(await page("/admin/settings")).toContain("up to date");
+    expect(await page("/admin/settings")).toContain("Up to date");
     env.UPDATE_LATEST = "9.9.9";
     expect(await page("/admin")).toContain("Update available: 9.9.9");
     expect(await page("/admin/settings")).toContain("Update available: 9.9.9");

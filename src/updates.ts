@@ -24,8 +24,8 @@ export function isNewer(a: string, b: string): boolean {
   return false;
 }
 
-/** The newest release when it is newer than `version`, else null (also on any failure). */
-export async function checkForUpdate(fetchFn: Fetch = fetch, version: string = currentVersion()): Promise<{ latest: string } | null> {
+/** The newest release GitHub reports (`newer` says whether it beats `version`), or null when the check failed. */
+export async function checkForUpdate(fetchFn: Fetch = fetch, version: string = currentVersion()): Promise<{ latest: string; newer: boolean } | null> {
   try {
     const res = await fetchFn(URL_LATEST, {
       headers: { "user-agent": `tessh-server/${version}`, accept: "application/vnd.github+json" },
@@ -35,7 +35,7 @@ export async function checkForUpdate(fetchFn: Fetch = fetch, version: string = c
     const tag = (await res.json()) as { tag_name?: unknown };
     if (typeof tag.tag_name !== "string") return null;
     const latest = tag.tag_name.trim().replace(/^v/, "");
-    return isNewer(latest, version) ? { latest } : null;
+    return { latest, newer: isNewer(latest, version) };
   } catch {
     return null;
   }
@@ -45,7 +45,8 @@ export async function checkForUpdate(fetchFn: Fetch = fetch, version: string = c
 export function scheduleUpdateChecks(env: Env, fetchFn?: Fetch): () => void {
   const run = async () => {
     const r = await checkForUpdate(fetchFn, env.VERSION);
-    if (r) env.UPDATE_LATEST = r.latest;
+    // A failed check changes nothing; a good one replaces what was known.
+    if (r) env.UPDATE_LATEST = r.newer ? r.latest : null;
   };
   const first = setTimeout(() => void run(), FIRST_MS);
   const daily = setInterval(() => void run(), DAY_MS);

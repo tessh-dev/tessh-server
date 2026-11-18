@@ -13,7 +13,7 @@ export const RESET_OWNER_MESSAGE = "Restart the server (docker compose restart t
 export function resetOwner(processEnv: NodeJS.ProcessEnv = process.env, log: (m: string) => void = console.log): void {
   const config = loadConfig(processEnv);
   mkdirSync(config.dataDir, { recursive: true });
-  const db = new Database(config.dbPath);
+  const db = new Database(config.dbPath, { busyTimeoutMs: 5000 });
   try {
     migrate(db, readMigrations(join(ROOT, "migrations")));
     db.prepare("INSERT INTO settings (key, value) VALUES ('reset_owner_requested', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind().execSync();
@@ -27,7 +27,13 @@ export function resetOwner(processEnv: NodeJS.ProcessEnv = process.env, log: (m:
 export function runCli(args: string[], processEnv: NodeJS.ProcessEnv = process.env, log: (m: string) => void = console.log): number | null {
   if (args.length === 0) return null;
   if (args[0] === "reset-owner") {
-    resetOwner(processEnv, log);
+    try {
+      resetOwner(processEnv, log);
+    } catch (e) {
+      if (!/locked|busy/i.test(String(e))) throw e;
+      console.error("The database is busy, try again in a moment.");
+      return 1;
+    }
     return 0;
   }
   console.error(`Unknown command: ${args[0]}\nUsage: tessh-server [reset-owner]`);

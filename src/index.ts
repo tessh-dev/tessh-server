@@ -35,11 +35,10 @@ export interface Env {
   /** The browser that typed the setup code: a hash of its token, bound to that code. Memory only. */
   SETUP_SESSION?: { hash: string; codeHash: string; expiresAt: number; totp: { secret: Uint8Array; expiresAt: number } | null } | null;
   /** An authenticator being enrolled for the owner, until confirmed or expired. Memory only. */
-  /** Whether the daily update check runs (UPDATE_CHECK=false turns it off). Unset counts as off. */
-  UPDATE_CHECK?: boolean;
-  /** The newest release the update check has seen, once it is newer than VERSION. Memory only. */
-  UPDATE_LATEST?: string | null;
   OWNER_TOTP_PENDING?: { secret: Uint8Array; expiresAt: number } | null;
+  /** The daily update check: whether it runs (UPDATE_CHECK=false turns it off) and the newer release it found, if any. Memory only. */
+  UPDATE_CHECK?: boolean;
+  UPDATE_LATEST?: string | null;
 }
 
 /** For the apps' "Custom server" check. */

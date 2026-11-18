@@ -375,8 +375,8 @@ ${sessionRows}
 </div>
 <div class="h">Maintenance</div>
 <div class="rows">
-<div class="srow"><div><b>Backups</b><small>One SQLite file</small></div><div class="btns"><a class="btn ghost sm" href="/admin/api/backup" download>Download a backup</a><span class="note">Nightly at 03:00 into the data volume</span></div></div>
-<div class="srow"><div><b>Updates</b><small>${esc(ctx.env.VERSION)}${update === undefined ? "" : ` · ${esc(update ? updateText(update) : "up to date")}`}</small></div><div class="mono muted">docker compose pull &amp;&amp; docker compose up -d</div></div>
+<div class="srow"><div><b>Backups</b><small>One SQLite file</small></div><div class="btns"><button type="button" class="btn ghost sm" data-open="backup">Download a backup</button><span class="note">Nightly at 03:00 into the data volume</span></div></div>
+<div class="srow"><div><b>Updates</b><small>${esc(ctx.env.VERSION)}${update === undefined ? "" : ` · ${esc(updateText(update))}`}</small></div><div class="mono muted">docker compose pull &amp;&amp; docker compose up -d</div></div>
 </div>`;
   const pw = (id: string, label: string, auto: string, extra = "") =>
     `<div class="fr"><label for="${id}">${label}</label><input id="${id}" type="password" required autocomplete="${auto}"${extra}></div>`;
@@ -393,6 +393,12 @@ ${sessionRows}
 <div class="fg"><div class="fr"><label for="totp-code">Code</label><input class="m" id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"></div></div>
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Turn on</button></div>
+</form></dialog>
+<dialog class="dlg" data-dialog="backup" aria-labelledby="backup-title"><form method="dialog" data-download="/admin/api/backup" novalidate>
+<h4 id="backup-title">Download a backup</h4><p class="cap">The file holds everyone's account data. Confirm it's you.</p>
+<div class="fg">${pw("backup-pw", "Password", "current-password", ' name="password"')}${owner.totp ? `<div class="fr"><label for="backup-code">Code</label><input class="m" id="backup-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"></div>` : ""}</div>
+<p class="err" role="alert" hidden></p>
+<div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary grow">Download</button></div>
 </form></dialog>
 <dialog class="dlg" data-dialog="totp-off" aria-labelledby="totp-off-title"><form method="dialog" data-api="/admin/api/owner/totp/disable" novalidate>
 <h4 id="totp-off-title">Turn off the authenticator</h4><p class="cap">Signing in will need only your password.</p>

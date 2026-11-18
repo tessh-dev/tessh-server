@@ -13,12 +13,12 @@ describe("update check", () => {
   });
 
   it("reports a newer release, ignoring the v", async () => {
-    expect(await checkForUpdate(release("v1.2.0"), "1.1.0")).toEqual({ latest: "1.2.0" });
+    expect(await checkForUpdate(release("v1.2.0"), "1.1.0")).toEqual({ latest: "1.2.0", newer: true });
   });
 
   it("reports nothing for the same or an older release", async () => {
-    expect(await checkForUpdate(release("v1.1.0"), "1.1.0")).toBeNull();
-    expect(await checkForUpdate(release("1.0.0"), "1.1.0")).toBeNull();
+    expect(await checkForUpdate(release("v1.1.0"), "1.1.0")).toEqual({ latest: "1.1.0", newer: false });
+    expect(await checkForUpdate(release("1.0.0"), "1.1.0")).toEqual({ latest: "1.0.0", newer: false });
   });
 
   it("is silent on failures", async () => {
@@ -49,9 +49,16 @@ describe("update check", () => {
       expect(env.UPDATE_LATEST).toBe("2.0.0");
       await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
       expect(fetchFn).toHaveBeenCalledTimes(2);
+      // A failed check keeps what was known; a good one that finds nothing newer clears it.
+      fetchFn.mockImplementationOnce(async () => { throw new Error("offline"); });
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+      expect(env.UPDATE_LATEST).toBe("2.0.0");
+      env.VERSION = "2.0.0";
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+      expect(env.UPDATE_LATEST).toBeNull();
       stop();
       await vi.advanceTimersByTimeAsync(3 * 24 * 60 * 60 * 1000);
-      expect(fetchFn).toHaveBeenCalledTimes(2);
+      expect(fetchFn).toHaveBeenCalledTimes(4);
     } finally {
       vi.useRealTimers();
     }
