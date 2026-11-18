@@ -5,7 +5,6 @@
   const RAMPS = {
     blue: ['#0b1a5e', '#1e3fd8', '#2f8fe0', '#7cc4ff'],
     blueLight: ['#c9d8ff', '#6f8ff0', '#2f5fe0', '#1e3fd8'],
-    aurora: ['#3b2a6e', '#a78bfa', '#60a5fa', '#4ade80'],
     mono: ['#1a1a1a', '#3a3a3a', '#6f6f6f', '#bdbdbd'],
   };
   function hex(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }

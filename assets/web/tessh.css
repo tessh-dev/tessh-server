@@ -19,7 +19,6 @@ input,select,textarea{font:inherit;color:inherit}
 .code input:focus{border-color:var(--accent)}
 .btn:focus-visible,.ch:focus-visible,.nav:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .btn[disabled]{opacity:.5;cursor:default}
-.btn.danger{color:var(--bad)}
 .ch{cursor:pointer;width:100%;text-align:left;color:var(--ink)}
 .nav{text-decoration:none;cursor:pointer}
 .app-body{max-width:none}
@@ -38,7 +37,7 @@ input,select,textarea{font:inherit;color:inherit}
 .fr{display:flex;align-items:center;gap:12px;min-height:46px;padding:8px 14px}.fr+.fr{border-top:1px solid var(--line2)}
 .fr label{width:84px;flex:none;font:500 13px var(--sans);color:var(--ink2)}
 .fr .v{flex:1;font-size:14px;color:var(--ink);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fr .v.m{font:13px var(--mono)}
-.fr .v.ph{color:var(--soft)}
+.fr .v.empty{color:var(--soft)}
 .fr.focus{box-shadow:inset 0 0 0 1.5px var(--accent);border-radius:12px}
 .okt{font:500 12px var(--sans);color:var(--ok);display:flex;align-items:center;gap:5px;white-space:nowrap}
 .okt i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
@@ -115,7 +114,6 @@ input,select,textarea{font:inherit;color:inherit}
 .srow b{display:block;font:500 13.5px var(--sans)}.srow small{font-size:12px;color:var(--muted)}
 .fieldi{height:34px;display:flex;align-items:center;gap:8px;padding:0 11px;border-radius:9px;background:var(--field);border:1px solid var(--line);font-size:13.5px}
 .fieldi.m{font:13px var(--mono)}
-.mono{font-family:var(--mono);font-size:12.5px}
 
 @media (max-width:760px){
  .body{grid-template-columns:1fr}.side{display:none}
