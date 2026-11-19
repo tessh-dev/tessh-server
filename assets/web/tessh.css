@@ -343,6 +343,7 @@ input.fieldi{width:100%;outline:0;color:var(--ink)}
 .upt .cap{margin:8px 2px 0}
 .srow small code{font:11.5px var(--mono);color:var(--ink2)}
 .srow .mono .okp,.srow .mono .warnp{font-weight:500}
+.srow .vrow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}
 @media (max-width:760px){.upcard{padding:14px}.upi{display:none}}
 .cn-block .stack{margin-top:2px}.cn-block .qr{margin:14px 0 0}.cn-block .qr-cap{margin:6px 0 12px;text-align:center}
 .cn-block .lbl{margin:0 0 6px}.cn-block .cmd{max-width:360px}

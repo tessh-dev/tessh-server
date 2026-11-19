@@ -1,7 +1,7 @@
 // The HTML document every web page (setup and panel) is wrapped in. CSP-compatible: styles and scripts
 // come from /_/ files only, so a page may carry no inline <script>, <style> or style="" attribute.
 // Each /_/ URL carries a hash of the file's content, so a browser fetches it fresh whenever it changes.
-import { assetURL } from "./assets.ts";
+import { assetURL, iconLinks } from "./assets.ts";
 import { icons } from "./icons.ts";
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -55,7 +55,7 @@ export function page({ title, body, script }: PageOptions): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark"><meta name="robots" content="noindex,nofollow">
-<title>${esc(title)}</title>${script === "panel" ? `<script src="${assetURL("theme.js")}"></script>` : ""}<link rel="stylesheet" href="${assetURL("tessh.css")}"><script src="${assetURL("field.js")}" defer></script>${script ? `<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL(`${script}.js`)}" defer></script>` : ""}
+<title>${esc(title)}</title>${iconLinks()}${script === "panel" ? `<script src="${assetURL("theme.js")}"></script>` : ""}<link rel="stylesheet" href="${assetURL("tessh.css")}"><script src="${assetURL("field.js")}" defer></script>${script ? `<script src="${assetURL("one-time-code.js")}" defer></script><script src="${assetURL(`${script}.js`)}" defer></script>` : ""}
 </head><body>
 ${body}
 </body></html>

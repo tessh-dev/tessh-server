@@ -8,7 +8,7 @@ import { joinRoutes } from "./web/join.ts";
 import { keysHost } from "./keys-host.ts";
 import { recoveryRoutes } from "./recovery.ts";
 import { syncRoutes } from "./sync.ts";
-import { serveAsset } from "./web/assets.ts";
+import { serveAsset, serveRootIcon } from "./web/assets.ts";
 import { panelRoutes } from "./web/panel.ts";
 import { setupRoutes } from "./web/setup.ts";
 import { twoStepRoutes } from "./two-step.ts";
@@ -45,6 +45,8 @@ export interface Env {
   /** When the last check succeeded, and when the latest attempt failed (null once one succeeds). Epoch ms. */
   UPDATE_CHECKED_AT?: number | null;
   UPDATE_FAILED_AT?: number | null;
+  /** Tests only: the fetch the panel's Check now uses instead of the real one. */
+  UPDATE_FETCH?: (input: string, init?: RequestInit) => Promise<Response>;
   /** The data volume, where nightly backups go (the panel reads the newest one's time). Unset in tests. */
   DATA_DIR?: string;
 }
@@ -92,6 +94,8 @@ function notSetUp(req: Request, pathname: string): Response | null {
 export async function handle(req: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(req.url);
   try {
+    const icon = serveRootIcon(req);
+    if (icon) return icon;
     if (!env.SETTINGS.setupDone) {
       const blocked = notSetUp(req, pathname);
       if (blocked) return blocked;

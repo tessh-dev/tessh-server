@@ -2,6 +2,7 @@
 // Tessh "ASCII blue" look: an ASCII field at the top, an install
 // card with copy buttons, the key list and a FAQ. Everything is inline (the CSP allows no other origin).
 import { NAMESPACE, type KeyKind } from "./keypage.ts";
+import { iconLinks } from "./web/assets.ts";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -29,8 +30,6 @@ const I = {
 };
 
 const MARK = `<span class="mark" aria-hidden="true">t<i>›</i><u></u></span>`;
-const FAVICON =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23141414'/%3E%3Ctext x='5' y='22' font-family='Menlo,monospace' font-weight='700' font-size='15' fill='%23ededed'%3Et%E2%80%BA%3C/text%3E%3Crect x='24' y='10' width='2.4' height='13' rx='1' fill='%2360a5fa'/%3E%3C/svg%3E";
 
 const fmtDate = (iso: string) => {
   const d = new Date(iso);
@@ -313,7 +312,7 @@ function shell(title: string, description: string, main: string, nav: string): s
 <meta name="description" content="${description}">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a0a0a">
-<link rel="icon" href="${FAVICON}">
+${iconLinks()}
 <style>${STYLE}
 </style>
 </head>

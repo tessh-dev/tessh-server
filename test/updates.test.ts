@@ -158,6 +158,7 @@ describe("update notice in the panel", () => {
   beforeEach(() => {
     env.UPDATE_CHECK = true;
     env.UPDATE_LATEST = env.UPDATE_RELEASE = env.UPDATE_CHECKED_AT = env.UPDATE_FAILED_AT = null;
+    env.UPDATE_FETCH = undefined;
   });
 
   it("Overview shows the card above the health tile when there's an update", async () => {
@@ -238,5 +239,60 @@ describe("update notice in the panel", () => {
 
   it("Maintenance: before the first check says it hasn't run yet", async () => {
     expect(await page("/admin/maintenance")).toContain("Not checked yet");
+  });
+  const checkNow = () =>
+    SELF.fetch(`${BASE}/admin/api/updates/check`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-tessh-owner": "1", origin: BASE, cookie },
+      body: "{}",
+    });
+  const CHECK_BTN = 'data-path="/admin/api/updates/check"';
+
+  it("Check now: runs the check at once and the page shows the new answer", async () => {
+    env.UPDATE_FETCH = release("v9.9.9", { html_url: "https://github.com/tessh-dev/tessh-server/releases/tag/v9.9.9" });
+    expect(await page("/admin/maintenance")).toContain(CHECK_BTN);
+    expect((await checkNow()).status).toBe(200);
+    expect(env.UPDATE_LATEST).toBe("9.9.9");
+    expect(await page("/admin/maintenance")).toContain("Tessh Server 9.9.9 is available");
+  });
+
+  it("Check now: a failure shows Couldn't check, never a stale up to date", async () => {
+    env.UPDATE_FETCH = async () => new Response("nope", { status: 503 });
+    expect((await checkNow()).status).toBe(200);
+    const html = await page("/admin/maintenance");
+    expect(html).toContain("Couldn't check for updates");
+    expect(html).toContain(CHECK_BTN);
+  });
+
+  it("Check now: a second press within 15 seconds doesn't call GitHub again", async () => {
+    let calls = 0;
+    env.UPDATE_FETCH = async () => (calls++, new Response(JSON.stringify({ tag_name: `v${env.VERSION}` })));
+    await checkNow();
+    await checkNow();
+    expect(calls).toBe(1);
+  });
+
+  it("Check now: no button and no call while the check is off", async () => {
+    env.UPDATE_CHECK = false;
+    let calls = 0;
+    env.UPDATE_FETCH = async () => (calls++, new Response("{}"));
+    expect(await page("/admin/maintenance")).not.toContain(CHECK_BTN);
+    expect((await checkNow()).status).toBe(200);
+    expect(calls).toBe(0);
+  });
+
+  it("Check now needs the owner", async () => {
+    const res = await SELF.fetch(`${BASE}/admin/api/updates/check`, { method: "POST", headers: { "content-type": "application/json", "x-tessh-owner": "1", origin: BASE }, body: "{}" });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("icons", () => {
+  it("every icon path answers with our own icon", async () => {
+    for (const [path, type] of [["/favicon.ico", "image/x-icon"], ["/apple-touch-icon.png", "image/png"], ["/apple-touch-icon-precomposed.png", "image/png"]] as const) {
+      const res = await SELF.fetch(`https://keys.test${path}`);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get("content-type")).toBe(type);
+    }
   });
 });

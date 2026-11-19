@@ -29,7 +29,7 @@ import {
 import { ownerJoinLink } from "../invites.ts";
 import { qrSVG } from "../qr.ts";
 import { ADDRESS_HINT, originFor, saveSetting, type SettingKey } from "../settings.ts";
-import { updateStatus } from "../updates.ts";
+import { checkNow, updateStatus } from "../updates.ts";
 import {
   formatBytes,
   isApple,
@@ -514,6 +514,9 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
       return saveSettings(env, actor, b);
     case "backup":
       return downloadBackup(req, env, actor, b);
+    case "updates/check":
+      await checkNow(env);
+      return json({ ok: true });
     case "owner/password":
       await changeOwnerPassword(env, req, tokenHash, str(b.current), str(b.next));
       await audit(env, actor, "owner_password", null).run();

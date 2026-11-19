@@ -244,7 +244,8 @@ function versionRow(ctx: PanelContext, u: Exclude<UpdateStatus, { kind: "update"
         : u.kind === "off"
           ? [`${v} · The update check is off`, "Remove <code>UPDATE_CHECK=false</code> from the server's environment to turn it back on"]
           : [`${v} · Not checked yet`, "The first check runs a minute after the server starts"];
-  return `<div class="srow"><div><b>Version</b><small>${note}</small></div><div class="mono">${right}</div></div>`;
+  const check = u.kind === "off" ? "" : action("Check now", { method: "POST", path: "/admin/api/updates/check" });
+  return `<div class="srow"><div><b>Version</b><small>${note}</small></div><div class="vrow"><span class="mono">${right}</span>${check}</div></div>`;
 }
 
 /** One device of one person, with Sign out. */

@@ -180,6 +180,18 @@ export function scheduleUpdateChecks(env: Env, fetchFn?: Fetch): () => void {
   };
 }
 
+/** Check now waits this long after the last attempt, so repeated presses don't spend GitHub's rate limit. */
+const CHECK_NOW_GAP_MS = 15_000;
+
+/** The panel's Check now: checks at once (unless one ran in the last 15 seconds) and records the answer. Off stays off. */
+export async function checkNow(env: Env, now = Date.now()): Promise<void> {
+  if (!env.UPDATE_CHECK) return;
+  const last = Math.max(env.UPDATE_CHECKED_AT ?? 0, env.UPDATE_FAILED_AT ?? 0);
+  if (now - last < CHECK_NOW_GAP_MS) return;
+  const r = await checkForUpdate(env.UPDATE_FETCH, env.VERSION);
+  recordCheck(env, r ? r.release : undefined, now);
+}
+
 /** What the panel says about updates. */
 export type UpdateStatus =
   | { kind: "off" }
