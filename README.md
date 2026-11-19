@@ -51,4 +51,17 @@ opens their invite link.
 
 ## Licence
 
-[MIT](LICENSE)
+Tessh Server is **free to use and source-available** under the [Elastic License 2.0](LICENSE), with one
+extra permission so you can host it for other people at no charge.
+
+**Why:** Tessh sync is free. We don't want anyone taking this server and charging people for
+something that's meant to cost nothing.
+
+| We're cool with | We're not cool with |
+|---|---|
+| Running it for yourself, your family or friends | Selling hosted Tessh sync, or bundling it into a paid service |
+| Running it for your team or company, including people outside it | Charging anyone for access, directly or indirectly |
+| Reading, changing and fixing the code, and sharing your changes | Removing the licence or copyright notices |
+| Using it at work, commercially, behind your own login | |
+
+Not sure if your use is fine? Ask: [help@tessh.dev](mailto:help@tessh.dev).

@@ -2,7 +2,7 @@
   "name": "tessh-server",
   "version": "1.2.1",
   "description": "Self-hostable sync and key page server for the Tessh SSH app",
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "private": true,
   "type": "module",
   "engines": {
