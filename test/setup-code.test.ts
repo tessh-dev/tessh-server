@@ -115,12 +115,12 @@ describe("not-set-up gate", () => {
   });
 
   it("redirects HTML pages to /setup", async () => {
-    const res = await get(unsetEnv(), "/bobby", { accept: "text/html" });
+    const res = await get(unsetEnv(), "/alice", { accept: "text/html" });
     expect([res.status, res.headers.get("location")]).toEqual([302, "/setup"]);
   });
 
   it("answers anything else with 503 text", async () => {
-    const res = await get(unsetEnv(), "/bobby/install.sh", { accept: "*/*" });
+    const res = await get(unsetEnv(), "/alice/install.sh", { accept: "*/*" });
     expect(res.status).toBe(503);
     expect(res.headers.get("content-type")).toContain("text/plain");
   });

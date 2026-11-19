@@ -25,12 +25,12 @@ describe("invite page", () => {
 
   it("names the owner when they have a username", async () => {
     const env = makeEnv();
-    env.DB.prepare("INSERT INTO users (id, email, auth_hash, salt, kdf, wrapped_vault_key, encrypted_signing_key, signer_public_key, username, created_at) VALUES ('u1', 'o@x.test', 'h', 's', '{}', 'w', 'e', 'k', 'bobby', '2026-01-01')")
+    env.DB.prepare("INSERT INTO users (id, email, auth_hash, salt, kdf, wrapped_vault_key, encrypted_signing_key, signer_public_key, username, created_at) VALUES ('u1', 'o@x.test', 'h', 's', '{}', 'w', 'e', 'k', 'alice', '2026-01-01')")
       .bind()
       .execSync();
     env.SETTINGS.ownerUserId = "u1";
     const { code } = createInvite(env, { label: "Sam", days: null, origin: "https://keys.test" });
-    expect(await (await get(env, `/join/${code}`)).text()).toContain("bobby invited you");
+    expect(await (await get(env, `/join/${code}`)).text()).toContain("alice invited you");
   });
 
   it("says the same thing for used, cancelled, expired and unknown codes, without echoing the code", async () => {

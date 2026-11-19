@@ -14,7 +14,6 @@ npm run build && npm start   # the compiled output, as the image runs it
 
 Layout: `src/index.ts` is the request handler (`fetch(request, env)` style), `src/server.ts` adapts it to
 `node:http`, `src/db.ts` is the small SQLite layer, `src/migrate.ts` applies `migrations/*.sql`, and
-`src/web/` holds the setup, panel and invite pages. The design is in
-[docs/design/web-setup-and-panel.md](design/web-setup-and-panel.md).
+`src/web/` holds the setup, panel and invite pages.
 
 [← Back to the README](../README.md)
