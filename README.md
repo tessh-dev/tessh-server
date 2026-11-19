@@ -33,7 +33,7 @@ One small Docker image, one SQLite file, no other services.
 You need Docker with Compose.
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/BobzTH/tessh-server/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/tessh-dev/tessh-server/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -213,7 +213,7 @@ docker compose up -d
 
 Database migrations run automatically at start. Each one runs once, in a transaction, so restarting is
 always safe. Take a backup before upgrading. When a newer release exists, the panel says so in the sidebar
-and under **Maintenance**. Releases are tagged `vX.Y.Z`; pin a tag such as `ghcr.io/bobzth/tessh-server:1.1.0`
+and under **Maintenance**. Releases are tagged `vX.Y.Z`; pin a tag such as `ghcr.io/tessh-dev/tessh-server:1.1.0`
 instead of `latest` if you prefer to upgrade by hand. To build the image yourself instead, run
 `docker compose up -d --build`.
 

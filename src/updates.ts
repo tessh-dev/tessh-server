@@ -5,7 +5,7 @@
 import type { Env } from "./index.ts";
 import { version as currentVersion } from "./version.ts";
 
-const REPO = "BobzTH/tessh-server";
+const REPO = "tessh-dev/tessh-server";
 const URL_LATEST = `https://api.github.com/repos/${REPO}/releases/latest`;
 export const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
 const FIRST_MS = 60_000;

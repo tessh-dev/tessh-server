@@ -59,18 +59,18 @@ describe("release notes", () => {
 describe("update check", () => {
   it("reports a newer release with its page, date and notes", async () => {
     const r = await checkForUpdate(
-      release("v1.2.0", { html_url: "https://github.com/BobzTH/tessh-server/releases/tag/v1.2.0", published_at: "2026-11-12T10:00:00Z", body: "- One\n- Two" }),
+      release("v1.2.0", { html_url: "https://github.com/tessh-dev/tessh-server/releases/tag/v1.2.0", published_at: "2026-11-12T10:00:00Z", body: "- One\n- Two" }),
       "1.1.0",
     );
     expect(r).toEqual({
       latest: "1.2.0",
       newer: true,
-      release: { version: "1.2.0", url: "https://github.com/BobzTH/tessh-server/releases/tag/v1.2.0", publishedAt: "2026-11-12T10:00:00.000Z", notes: ["One", "Two"] },
+      release: { version: "1.2.0", url: "https://github.com/tessh-dev/tessh-server/releases/tag/v1.2.0", publishedAt: "2026-11-12T10:00:00.000Z", notes: ["One", "Two"] },
     });
   });
 
   it("never links anywhere but the repo's releases", async () => {
-    for (const html_url of ["javascript:alert(1)", "https://evil.example/BobzTH/tessh-server/releases/x", "http://github.com/BobzTH/tessh-server/releases/x", 7]) {
+    for (const html_url of ["javascript:alert(1)", "https://evil.example/tessh-dev/tessh-server/releases/x", "http://github.com/tessh-dev/tessh-server/releases/x", 7]) {
       expect((await checkForUpdate(release("v1.2.0", { html_url }), "1.1.0"))!.release.url).toBe(RELEASES_PAGE);
     }
     expect((await checkForUpdate(release("v1.2.0", { published_at: "soon" }), "1.1.0"))!.release.publishedAt).toBeNull();
@@ -93,7 +93,7 @@ describe("update check", () => {
     const fetchFn = vi.fn((_url: string, _init?: RequestInit) => release("1.0.0")());
     await checkForUpdate(fetchFn, "1.0.0");
     const [url, init] = fetchFn.mock.calls[0];
-    expect(url).toBe("https://api.github.com/repos/BobzTH/tessh-server/releases/latest");
+    expect(url).toBe("https://api.github.com/repos/tessh-dev/tessh-server/releases/latest");
     expect((init!.headers as Record<string, string>)["user-agent"]).toBe("tessh-server/1.0.0");
     expect(init!.signal).toBeInstanceOf(AbortSignal);
   });
@@ -140,7 +140,7 @@ describe("update notice in the panel", () => {
   const page = async (path: string) => (await SELF.fetch(`${BASE}${path}`, { headers: { cookie } })).text();
   const NEW: Release = {
     version: "9.9.9",
-    url: "https://github.com/BobzTH/tessh-server/releases/tag/v9.9.9",
+    url: "https://github.com/tessh-dev/tessh-server/releases/tag/v9.9.9",
     publishedAt: "2026-11-12T10:00:00.000Z",
     notes: releaseNotes("## Highlights\n- <script>alert(1)</script> fixed\n- See [docs](https://evil.example)"),
   };
@@ -171,7 +171,7 @@ describe("update notice in the panel", () => {
     expect(html).toContain("<li>Highlights</li><li>&lt;script&gt;alert(1)&lt;/script&gt; fixed</li><li>See docs</li>");
     expect(html).not.toContain("<script>alert");
     expect(html).not.toContain("evil.example");
-    expect(html).toContain(`<a class="upl" href="https://github.com/BobzTH/tessh-server/releases/tag/v9.9.9" target="_blank" rel="noopener">What's new</a>`);
+    expect(html).toContain(`<a class="upl" href="https://github.com/tessh-dev/tessh-server/releases/tag/v9.9.9" target="_blank" rel="noopener">What's new</a>`);
     expect(html).toContain(`<code>${CMD}</code>`);
     expect(html).toContain("Run it where your compose file is. Your data stays in the data volume.");
     expect(html).not.toMatch(/\sstyle=/);

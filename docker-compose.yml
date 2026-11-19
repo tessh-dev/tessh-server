@@ -1,6 +1,6 @@
 services:
   tessh-server:
-    image: ghcr.io/bobzth/tessh-server:latest
+    image: ghcr.io/tessh-dev/tessh-server:latest
     build: .
     container_name: tessh-server
     restart: unless-stopped
