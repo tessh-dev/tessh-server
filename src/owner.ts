@@ -211,19 +211,9 @@ export async function confirmTotp(env: Env, code: string, req?: Request): Promis
   if (r.meta.changes !== 1) throw new HttpError("two_step_enabled", 409, "The authenticator is already on");
 }
 
-export async function disableTotp(env: Env, req: Request, password: string): Promise<void> {
-  const refund = reserve(limitKey(clientIP(req)));
-  let failed = false;
-  try {
-    const owner = await loadOwner(env);
-    if (!owner) throw unauthorized();
-    if (!(await verifyPassword(password, owner.password_hash))) {
-      failed = true;
-      throw new HttpError("invalid_credentials", 401, "Wrong password");
-    }
-  } finally {
-    if (!failed) refund();
-  }
+/** Turns the authenticator off after the password and a current code, the same check as the backup (confirmOwner). */
+export async function disableTotp(env: Env, req: Request, input: { password: unknown; code?: unknown }): Promise<void> {
+  await confirmOwner(env, req, input);
   await env.DB.prepare("UPDATE owner SET totp_secret = NULL, totp_last_step = NULL, updated_at = ? WHERE id = 1").bind(new Date().toISOString()).run();
 }
 

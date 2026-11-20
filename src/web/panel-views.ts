@@ -397,7 +397,7 @@ function personRow(ctx: PanelContext, p: Person, open: boolean): string {
                 path: `/admin/api/team/${p.id}/suspend`,
                 body: { suspended: true },
                 tone: "warn",
-                confirm: { title: `Suspend ${p.name}?`, text: "They can't sign in or sync until you unsuspend them. Nothing is deleted.", ok: "Suspend" },
+                confirm: { title: `Suspend ${p.name}?`, text: "They can't sign in, sync or change their account until you unsuspend them. Nothing is deleted.", ok: "Suspend" },
               })
         }${action("Remove", {
           method: "DELETE",
@@ -583,6 +583,7 @@ ${sessionRows}
 <dialog class="dlg" data-dialog="totp-off" aria-labelledby="totp-off-title"><form method="dialog" data-api="/admin/api/owner/totp/disable" novalidate>
 <h4 id="totp-off-title">Turn off the authenticator</h4><p class="cap">Signing in will need only your password.</p>
 <div class="fg">${pw("totp-off-pw", "Password", "current-password", ' name="password"')}</div>
+<div class="otp-box" id="totp-off-code" data-otp data-name="code" data-label="Authenticator code"></div>
 <p class="err" role="alert" hidden></p>
 <div class="acts"><button class="btn ghost" value="cancel" formnovalidate>Cancel</button><button type="submit" class="btn primary danger grow">Turn off</button></div>
 </form></dialog>`;

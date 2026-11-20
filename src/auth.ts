@@ -81,16 +81,23 @@ export interface AuthContext {
   tokenHash: string;
 }
 
-export async function authenticate(req: Request, env: Env): Promise<AuthContext> {
+/**
+ * Resolves the bearer token. A suspended account keeps its sessions (unsuspending restores them), but they are
+ * refused with 403 account_suspended unless the route passes `allowSuspended`: only reading the account, listing
+ * devices, signing out and deleting the account do.
+ */
+export async function authenticate(req: Request, env: Env, opts: { allowSuspended?: boolean } = {}): Promise<AuthContext> {
   const m = /^Bearer (tsk_[A-Za-z0-9_-]+)$/.exec(req.headers.get("authorization") ?? "");
   if (!m) throw new HttpError("unauthorized", 401, "Missing or invalid token");
   const tokenHash = await sha256Hex(m[1]);
   const row = await env.DB.prepare(
-    "SELECT s.user_id, s.device_id, d.last_seen_at FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.token_hash = ?",
+    `SELECT s.user_id, s.device_id, d.last_seen_at, u.suspended_at FROM sessions s
+       JOIN devices d ON d.id = s.device_id JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`,
   )
     .bind(tokenHash)
-    .first<{ user_id: string; device_id: string; last_seen_at: string }>();
+    .first<{ user_id: string; device_id: string; last_seen_at: string; suspended_at: string | null }>();
   if (!row) throw new HttpError("unauthorized", 401, "Missing or invalid token");
+  if (row.suspended_at !== null && !opts.allowSuspended) throw new HttpError("account_suspended", 403, "This account is suspended");
   // A write per request is wasted on a value shown to the minute: only refresh it when 5 minutes stale.
   const now = Date.now();
   if (!(Date.parse(row.last_seen_at) > now - LAST_SEEN_EVERY_MS)) {

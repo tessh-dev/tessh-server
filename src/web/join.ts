@@ -1,9 +1,9 @@
 // The page an invite link opens: `/join/<code>`. It tells the person who invited them and hands the server
 // and code to the app. A code that is used, cancelled, expired or unknown gets one plain message that never
 // repeats the code.
-import { error } from "../http.ts";
+import { HttpError, clientIP, error, limitKey } from "../http.ts";
 import type { Env } from "../index.ts";
-import { findUsableInvite } from "../invites.ts";
+import { checkInviteLimit, countInviteFailure, findUsableInvite } from "../invites.ts";
 import { originFor } from "../settings.ts";
 import { MARK, esc, page } from "./shell.ts";
 
@@ -55,10 +55,24 @@ function used(env: Env): string {
   return render(env, `<section class="ocard invite">${MARK}<h3>This invite has ended</h3>\n<p class="sub">This invite has been used or has run out. Ask for a new one.</p></section>`);
 }
 
-/** `/join/<code>`. */
+function limited(env: Env): string {
+  return render(env, `<section class="ocard invite">${MARK}<h3>Too many tries</h3>\n<p class="sub">Too many wrong invite codes. Try again in 15 minutes.</p></section>`);
+}
+
+/** `/join/<code>`. Wrong codes count with wrong codes at sign-up: 10 per address, 200 in all per 15 minutes. */
 export async function joinRoutes(req: Request, env: Env): Promise<Response> {
   if (req.method !== "GET" && req.method !== "HEAD") return error("invalid_request", 405, "Method not allowed", undefined, { allow: "GET, HEAD" });
   const code = new URL(req.url).pathname.slice("/join/".length);
-  const html = CODE_RE.test(code) && findUsableInvite(env, code) ? valid(req, env, code) : used(env);
+  const key = limitKey(clientIP(req));
+  const now = Date.now();
+  try {
+    checkInviteLimit(key, now);
+  } catch (e) {
+    if (!(e instanceof HttpError)) throw e;
+    return new Response(req.method === "HEAD" ? null : limited(env), { status: 429, headers: { ...HEADERS, ...e.headers } });
+  }
+  const usable = CODE_RE.test(code) && findUsableInvite(env, code) !== null;
+  if (!usable) countInviteFailure(key, now);
+  const html = usable ? valid(req, env, code) : used(env);
   return new Response(req.method === "HEAD" ? null : html, { headers: HEADERS });
 }

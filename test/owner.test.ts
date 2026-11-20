@@ -157,11 +157,17 @@ describe("owner login", () => {
     expect((await failure(confirmTotp(env, await totpAt(base32Decode(secret), stepAt(Date.now()))))).code).toBe("two_step_not_pending");
   });
 
-  it("turns the authenticator off only with the password", async () => {
+  it("turns the authenticator off only with the password and a current code", async () => {
     const env = await setup();
-    await enrol(env);
-    expect((await failure(disableTotp(env, req(), "wrong password here"))).status).toBe(401);
-    await disableTotp(env, req(), PW);
+    const { key, step } = await enrol(env);
+    const secretNow = async () => (await env.DB.prepare("SELECT totp_secret FROM owner WHERE id = 1").first<{ totp_secret: unknown }>())!.totp_secret;
+    const before = await secretNow();
+    expect((await failure(disableTotp(env, req(), { password: "wrong password here", code: await totpAt(key, step + 1) }))).status).toBe(401);
+    expect((await failure(disableTotp(env, req(), { password: PW }))).code).toBe("code_required");
+    expect((await failure(disableTotp(env, req(), { password: PW, code: "000000" }))).code).toBe("invalid_code");
+    expect(await secretNow()).toEqual(before);
+    await disableTotp(env, req(), { password: PW, code: await totpAt(key, step + 1) });
+    expect(await secretNow()).toBeNull();
     await expect(signIn(env, req(), { email: EMAIL, password: PW })).resolves.toBeTruthy();
   });
 
@@ -300,8 +306,8 @@ describe("owner login", () => {
   it("limits turning the authenticator off by address", async () => {
     const env = await setup();
     await enrol(env);
-    for (let i = 0; i < 5; i++) expect((await failure(disableTotp(env, req({ ip: "5.5.5.5" }), "wrong password here"))).status).toBe(401);
-    expect((await failure(disableTotp(env, req({ ip: "5.5.5.5" }), PW))).status).toBe(429);
+    for (let i = 0; i < 5; i++) expect((await failure(disableTotp(env, req({ ip: "5.5.5.5" }), { password: "wrong password here" }))).status).toBe(401);
+    expect((await failure(disableTotp(env, req({ ip: "5.5.5.5" }), { password: PW }))).status).toBe(429);
   });
 
   it("shares one bucket per IPv6 /64 and leaves IPv4 alone", async () => {

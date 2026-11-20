@@ -12,7 +12,8 @@ import {
 } from "./auth.ts";
 import { HttpError, clientIP, json, limitKey, readJSON } from "./http.ts";
 import type { Env } from "./index.ts";
-import { consumeInviteStatements, findUsableInvite, invalidInvite } from "./invites.ts";
+import { checkInviteLimit, consumeInviteStatements, countInviteFailure, findUsableInvite, invalidInvite } from "./invites.ts";
+export { resetInviteAttempts } from "./invites.ts";
 import { assertCanSignIn, effectiveLimits } from "./limits.ts";
 import { issueChallenge, isEnabled, requireSecondFactor, twoStepView } from "./two-step.ts";
 
@@ -128,44 +129,6 @@ export function sessionStatements(env: Env, userId: string, deviceId: string, to
   ];
 }
 
-// ---- Wrong invite codes ----
-
-const INVITE_MAX_WRONG = 10;
-const INVITE_MAX_WRONG_ALL = 200;
-const INVITE_MAX_TRACKED = 10_000;
-const inviteFailures = new Map<string, { count: number; since: number }>();
-let inviteGlobal = { count: 0, since: 0 };
-
-/** Forgets every address's wrong invite codes. */
-export function resetInviteAttempts(): void {
-  inviteFailures.clear();
-  inviteGlobal = { count: 0, since: 0 };
-}
-
-const tooManyCodes = (since: number, now: number) =>
-  new HttpError("too_many_attempts", 429, "Too many wrong invite codes. Try again in 15 minutes.", undefined, {
-    "retry-after": String(Math.max(1, Math.ceil((WINDOW_MS - (now - since)) / 1000))),
-  });
-
-/** 429 once an address (IPv6 by /64) has 10 wrong codes in 15 minutes, or every address once there are 200. */
-function checkInviteLimit(key: string, now: number): void {
-  for (const [k, a] of inviteFailures) if (now - a.since > WINDOW_MS) inviteFailures.delete(k);
-  if (now - inviteGlobal.since > WINDOW_MS) inviteGlobal = { count: 0, since: now };
-  const a = inviteFailures.get(key);
-  if (a && a.count >= INVITE_MAX_WRONG) throw tooManyCodes(a.since, now);
-  if (inviteGlobal.count >= INVITE_MAX_WRONG_ALL) throw tooManyCodes(inviteGlobal.since, now);
-}
-
-function countInviteFailure(key: string, now: number): void {
-  inviteGlobal.count++;
-  const a = inviteFailures.get(key);
-  if (a) a.count++;
-  else {
-    while (inviteFailures.size >= INVITE_MAX_TRACKED) inviteFailures.delete(inviteFailures.keys().next().value as string);
-    inviteFailures.set(key, { count: 1, since: now });
-  }
-}
-
 /** A supplied code that didn't work. On a closed server a wrong code answers `signups_closed`, so that counts too. */
 const isCodeFailure = (e: unknown) =>
   e instanceof HttpError && (e.code === "invite_invalid" || e.code === "invite_required" || e.code === "signups_closed");
@@ -277,7 +240,17 @@ async function login(req: Request, env: Env): Promise<Response> {
     await clear.run();
     return json({ two_step_required: true, challenge: await issueChallenge(env, u.id, device) });
   }
-  return loginSuccess(env, u.id, device, [clear]);
+  // The session is written only if the password checked above is still the account's password, so a password
+  // change or recovery that lands in between cannot be outlived by this sign-in.
+  const stillValid = env.DB.prepare(
+    "INSERT INTO quota_guard (ok) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ? AND auth_hash = ?)",
+  ).bind(u.id, given);
+  try {
+    return await loginSuccess(env, u.id, device, [stillValid, clear]);
+  } catch (e) {
+    if (isGuardFailure(e)) throw new HttpError("invalid_credentials", 401, "Invalid email or password");
+    throw e;
+  }
 }
 
 /** Creates a session for the device (after `pre` in the same batch) and returns the /v1/login success body. */
@@ -307,7 +280,7 @@ export async function loginSuccess(
 }
 
 async function logout(req: Request, env: Env): Promise<Response> {
-  const a = await authenticate(req, env);
+  const a = await authenticate(req, env, { allowSuspended: true });
   // Deleting the device cascades to its sessions.
   await env.DB.batch([
     env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(a.tokenHash),
@@ -388,6 +361,8 @@ async function changePassword(req: Request, env: Env): Promise<Response> {
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").bind(a.userId, a.tokenHash),
     env.DB.prepare("DELETE FROM devices WHERE user_id = ? AND id != ?").bind(a.userId, a.deviceId),
     env.DB.prepare("DELETE FROM recovery_tokens WHERE user_id = ?").bind(a.userId),
+    // Sign-ins started with the old password die with it.
+    env.DB.prepare("DELETE FROM login_challenges WHERE user_id = ?").bind(a.userId),
   ]);
   return new Response(null, { status: 204 });
 }
@@ -410,7 +385,8 @@ const badRecoveryToken = () => new HttpError("invalid_credentials", 401, "Invali
 async function deleteAccount(req: Request, env: Env): Promise<Response> {
   const b = obj(await readJSON(req), "body");
   if (b.recoveryToken === undefined) {
-    const a = await authenticate(req, env);
+    // A suspended person may still delete their own data (password and second factor still apply).
+    const a = await authenticate(req, env, { allowSuspended: true });
     await requireAuthKey(env, a.userId, b.authKey);
     await requireSecondFactor(env, a.userId, b);
     await env.DB.batch(deleteUserStatements(env, a.userId));
@@ -436,7 +412,7 @@ async function deleteAccount(req: Request, env: Env): Promise<Response> {
 }
 
 async function listDevices(req: Request, env: Env): Promise<Response> {
-  const a = await authenticate(req, env);
+  const a = await authenticate(req, env, { allowSuspended: true });
   const { results } = await env.DB.prepare(
     "SELECT id, name, platform, created_at, last_seen_at FROM devices WHERE user_id = ? ORDER BY created_at, id",
   )
@@ -474,7 +450,7 @@ export async function accountRoutes(req: Request, env: Env): Promise<Response | 
   if (m === "POST" && pathname === "/v1/login") return login(req, env);
   if (m === "POST" && pathname === "/v1/logout") return logout(req, env);
   if (m === "GET" && pathname === "/v1/account") {
-    const a = await authenticate(req, env);
+    const a = await authenticate(req, env, { allowSuspended: true });
     return json(await accountView(env, a.userId));
   }
   if (m === "PUT" && pathname === "/v1/account/username") return setUsername(req, env);

@@ -528,7 +528,7 @@ async function api(req: Request, env: Env, path: string, url: URL): Promise<Resp
       await audit(env, actor, "totp_on", null).run();
       return json({ ok: true });
     case "owner/totp/disable":
-      await disableTotp(env, req, str(b.password));
+      await disableTotp(env, req, { password: b.password, code: b.code });
       await audit(env, actor, "totp_off", null).run();
       return json({ ok: true });
     case "owner/sessions/end-others": {

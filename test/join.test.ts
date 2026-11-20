@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/index.ts";
-import { createInvite } from "../src/invites.ts";
+import { createInvite, resetInviteAttempts } from "../src/invites.ts";
 import { loadSettings } from "../src/settings.ts";
 import { makeEnv, freshDB } from "./harness.ts";
+import { registerBody } from "./helpers.ts";
 
 const get = (env: ReturnType<typeof makeEnv>, path: string, method = "GET") => handle(new Request(`https://keys.test${path}`, { method, headers: { accept: "text/html" } }), env);
 
 describe("invite page", () => {
+  beforeEach(() => resetInviteAttempts());
+
   it("welcomes a valid code and links into the app", async () => {
     const env = makeEnv({ SERVER_NAME: "Holmes Lab", SETTINGS: { ...loadSettings(freshDB(), {}), setupDone: true, name: "Holmes Lab" } });
     const { code } = createInvite(env, { label: "Sam", days: 7, origin: "https://keys.test" });
@@ -64,5 +67,49 @@ describe("invite page", () => {
     const unset = makeEnv({ SETTINGS: { ...loadSettings(freshDB(), {}), setupDone: false } });
     const res = await handle(new Request("https://keys.test/join/abc123", { headers: { accept: "text/html" } }), unset);
     expect([res.status, res.headers.get("location")]).toEqual([302, "/setup"]);
+  });
+
+  it("wrong codes count against the sign-up limit: 10 per address, then 429 even for a live code", async () => {
+    const env = makeEnv({ SIGNUPS: "invite" });
+    const { code } = createInvite(env, { label: "Sam", days: 7, origin: "https://keys.test" });
+    const from = (ip: string, path: string) =>
+      handle(new Request(`https://keys.test${path}`, { headers: { accept: "text/html", "x-tessh-client-ip": ip } }), env);
+    for (let i = 0; i < 10; i++) expect((await from("4.4.4.4", `/join/nope${i}0`)).status).toBe(200);
+    const limited = await from("4.4.4.4", `/join/${code}`);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
+    expect(limited.headers.get("content-type")).toContain("text/html");
+    const html = await limited.text();
+    expect(html).toContain("Too many wrong invite codes");
+    expect(html).not.toContain(code);
+    // The same counter guards sign-up.
+    const reg = await handle(
+      new Request("https://keys.test/v1/register", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-tessh-client-ip": "4.4.4.4" },
+        body: JSON.stringify(registerBody("late@example.com", { invite: code })),
+      }),
+      env,
+    );
+    expect(reg.status).toBe(429);
+    // Another address still sees the invite, and a right code is never counted.
+    for (let i = 0; i < 12; i++) expect(await (await from("5.5.5.5", `/join/${code}`)).text()).toContain("You're invited");
+  });
+
+  it("wrong sign-up codes count against the invite page too", async () => {
+    const env = makeEnv({ SIGNUPS: "invite" });
+    const { code } = createInvite(env, { label: "Sam", days: 7, origin: "https://keys.test" });
+    for (let i = 0; i < 10; i++) {
+      await handle(
+        new Request("https://keys.test/v1/register", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-tessh-client-ip": "6.6.6.6" },
+          body: JSON.stringify(registerBody(`x${i}@example.com`, { invite: `bad${i}0` })),
+        }),
+        env,
+      );
+    }
+    const res = await handle(new Request(`https://keys.test/join/${code}`, { headers: { "x-tessh-client-ip": "6.6.6.6" } }), env);
+    expect(res.status).toBe(429);
   });
 });

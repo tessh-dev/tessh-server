@@ -340,7 +340,25 @@
   $$('dialog form[data-api]').forEach((f) => {
     const box = $('[data-otp]', f);
     if (!box) { wireForm(f); return; }
-    const field = codeField(box, (code) => call('POST', f.dataset.api, Object.assign(formBody(f), { code })), () => after(f.dataset.then));
+    const send = (code) => call('POST', f.dataset.api, Object.assign(formBody(f), { code }));
+    // A dialog that also asks for the password (turning the authenticator off) waits for it, like the backup one.
+    const pw = $('input[name=password]', f);
+    const err = $('.err', f);
+    const show = (m) => { err.textContent = m || ''; err.hidden = !m; };
+    const field = codeField(box, !pw ? send : async (code) => {
+      show('');
+      if (!pw.value) {
+        show(`Type your password, then press ${$('button[type=submit]', f).textContent}.`);
+        return null;
+      }
+      try {
+        return await send(code);
+      } catch (x) {
+        if (x.code === 'invalid_code') throw x;
+        show(x.message);
+        return null;
+      }
+    }, () => after(f.dataset.then));
     dialogFields.set(f.closest('dialog'), field);
     wireForm(f, { before: (show) => checkCode(field, show) });
   });
