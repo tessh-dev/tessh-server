@@ -395,6 +395,21 @@ describe("two-step sign-in", () => {
     expect(l.token).toBeUndefined();
     expect((await two({ challenge: l.challenge, backup_code: u.backup[1] })).status).toBe(200);
   });
+
+  it("changing the password drops sign-ins started with the old one", async () => {
+    const u = await enrol("cp@x.com");
+    const challenge = await challengeFor("cp@x.com");
+    const res = await call(
+      "PUT",
+      "/v1/account/password",
+      { currentAuthKey: b64(bytes(32, 1)), authKey: b64(bytes(32, 31)), salt: b64(bytes(16, 32)), kdf: KDF, wrappedVaultKey: b64(bytes(60, 33)) },
+      u.token,
+    );
+    expect(res.status).toBe(204);
+    expect(await count("SELECT COUNT(*) AS n FROM login_challenges WHERE user_id = ?", u.userId)).toBe(0);
+    const late = await two({ challenge, backup_code: u.backup[0] });
+    expect([late.status, ((await late.json()) as any).error]).toEqual([401, "invalid_challenge"]);
+  });
 });
 
 describe("two-step management", () => {

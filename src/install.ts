@@ -35,6 +35,8 @@ tessh_main() {
 cat <<'TESSH_MAIN_EOF'
 PIN="$HOME/.ssh/tessh-signer-$TESSH_USER"
 SEQF="$HOME/.ssh/tessh-seq-$TESSH_USER"
+LASTK="$HOME/.ssh/tessh-last-$TESSH_USER.keys"
+LASTR="$HOME/.ssh/tessh-last-$TESSH_USER.revoked"
 UPD="$HOME/.ssh/tessh-update-$TESSH_USER.sh"
 
 AK="\${AUTHORIZED_KEYS:-$HOME/.ssh/authorized_keys}"
@@ -51,6 +53,11 @@ done
 
 say() { printf '%s\\n' "$*"; }
 die() { printf 'install.sh: %s\\n' "$*" >&2; exit 1; }
+
+# The target may sit in a directory another account owns (--file /home/deploy/.ssh/authorized_keys run as
+# root), so never follow a link there: refuse a linked target or directory, and make every new file with mktemp.
+[ -L "$AK" ] && die "$AK is a symbolic link, nothing changed. Point --file at the real file."
+[ -L "$(dirname "$AK")" ] && die "$(dirname "$AK") is a symbolic link, nothing changed. Point --file at the real directory."
 
 # 0. Which signing key to trust: TESSH_SIGNER, else the one baked into the updater, else the pinned one,
 #    else (first run: trust on first use) the one this download serves.
@@ -97,14 +104,19 @@ for f in keys revoked; do
 done
 
 # 2. Version: both signed lists start with "# tessh-keys seq=<n> updated=<date>". Refuse lists older than
-#    the last ones installed here, so a replayed old list can't bring back a revoked key.
+#    the last ones installed here, so a replayed old list can't bring back a revoked key. At the same version
+#    only the very same lists are accepted, so a second pair signed with one version can't either.
 seq_of() { sed -n '1s/^# tessh-keys seq=\\([0-9][0-9]*\\) updated=[^ ]*$/\\1/p' "$1"; }
 SEQ=$(seq_of "$tmp/keys")
 [ -n "$SEQ" ] && [ "$SEQ" = "$(seq_of "$tmp/revoked")" ] || die "the key lists have no matching version header, nothing changed"
 if [ -f "$SEQF" ]; then
   LAST=$(cat "$SEQF")
-  case "$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
+  case "$LAST" in ''|*[!0-9]*) die "$SEQF is damaged (it should hold a version number), nothing changed. Delete it to trust the served lists again." ;; esac
   [ "$SEQ" -ge "$LAST" ] || die "the served key lists (version $SEQ) are older than the ones last installed here (version $LAST), nothing changed. Someone may be replaying an old list."
+  if [ "$SEQ" -eq "$LAST" ] && [ -f "$LASTK" ] && [ -f "$LASTR" ]; then
+    { cmp -s "$tmp/keys" "$LASTK" && cmp -s "$tmp/revoked" "$LASTR"; } ||
+      die "the served key lists say version $SEQ but differ from the version $SEQ lists installed here, nothing changed. Someone may be serving a forged list."
+  fi
 fi
 
 if [ "$DRY" -eq 0 ]; then
@@ -114,6 +126,7 @@ if [ "$DRY" -eq 0 ]; then
     say "Pinned the signing key for $IDENTITY in $PIN."
   fi
   printf '%s\\n' "$SEQ" > "$SEQF"
+  cp "$tmp/keys" "$LASTK" && cp "$tmp/revoked" "$LASTR" || die "could not record the installed lists in $HOME/.ssh"
   # First run from the network: write the updater, this script with the trusted key baked in.
   if [ -z "$BAKED_SIGNER" ] && [ ! -f "$UPD" ]; then
     {
@@ -171,9 +184,12 @@ fi
 dir=$(dirname "$AK")
 if [ ! -d "$dir" ]; then mkdir -p "$dir" && chmod 700 "$dir"; fi
 backup=""
-if [ -f "$AK" ]; then backup="$AK.bak.$(date +%Y%m%d%H%M%S)"; cp -p "$AK" "$backup"; fi
+if [ -f "$AK" ]; then
+  backup=$(mktemp "$AK.bak.$(date +%Y%m%d%H%M%S).XXXXXX") || die "could not create a backup of $AK, nothing changed"
+  cp "$AK" "$backup" || die "could not back up $AK, nothing changed"
+fi
 # Written beside the target and renamed over it, so a failure midway never leaves a half-written file.
-new="$dir/.tessh-authorized_keys.$$"
+new=$(mktemp "$dir/.tessh-authorized_keys.XXXXXX") || die "could not create a temp file in $dir, nothing changed"
 if cat "$tmp/kept" "$tmp/add" > "$new" && chmod 600 "$new" && mv -f "$new" "$AK"; then
   :
 else

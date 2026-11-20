@@ -8,11 +8,11 @@
 - **Always use HTTPS** in front of the server. Sign-in tokens and the owner session travel in headers and
   cookies. Setup warns you when the address isn't HTTPS.
 - **Protect the owner login.** Use a long password and turn on the authenticator code. Panel writes are
-  refused from other sites, and downloading a backup needs the owner password again.
+  refused from other sites, and downloading a backup or turning the authenticator off needs the owner password (and code) again.
 - **Rate limits.** Password and two-step attempts are limited per account (10 per 15 minutes), recovery
   code attempts more tightly (5 per hour). Owner sign-ins allow 5 failures per address in 15 minutes, and
-  after 200 failures from all addresses together everyone waits out the 15 minutes. Wrong invite codes allow
-  10 per address and 200 in all per 15 minutes. Consider rate limiting at your proxy as well.
+  after 200 failures from all addresses together everyone waits out the 15 minutes. Wrong invite codes, at sign-up
+  and on invite links together, allow 10 per address and 200 in all per 15 minutes. Consider rate limiting at your proxy as well.
 - **Client addresses.** The server trusts `X-Forwarded-For` only when the connection comes from a loopback
   or private address (a reverse proxy on the same machine or network). Anything else is limited by the
   address it connects from, so don't expose a private-network proxy that passes through headers from

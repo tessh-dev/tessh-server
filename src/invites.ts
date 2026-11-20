@@ -107,6 +107,47 @@ export function listInvites(env: Env): { waiting: InviteRow[]; used: InviteRow[]
   return { waiting: waiting.map(view), used: used.map(view) };
 }
 
+// ---- Wrong invite codes ----
+// One counter for every place that tells a caller whether a code works: sign-up and the invite page.
+
+const WINDOW_MS = 15 * 60_000;
+
+const INVITE_MAX_WRONG = 10;
+const INVITE_MAX_WRONG_ALL = 200;
+const INVITE_MAX_TRACKED = 10_000;
+const inviteFailures = new Map<string, { count: number; since: number }>();
+let inviteGlobal = { count: 0, since: 0 };
+
+/** Forgets every address's wrong invite codes. */
+export function resetInviteAttempts(): void {
+  inviteFailures.clear();
+  inviteGlobal = { count: 0, since: 0 };
+}
+
+const tooManyCodes = (since: number, now: number) =>
+  new HttpError("too_many_attempts", 429, "Too many wrong invite codes. Try again in 15 minutes.", undefined, {
+    "retry-after": String(Math.max(1, Math.ceil((WINDOW_MS - (now - since)) / 1000))),
+  });
+
+/** 429 once an address (IPv6 by /64) has 10 wrong codes in 15 minutes, or every address once there are 200. */
+export function checkInviteLimit(key: string, now: number): void {
+  for (const [k, a] of inviteFailures) if (now - a.since > WINDOW_MS) inviteFailures.delete(k);
+  if (now - inviteGlobal.since > WINDOW_MS) inviteGlobal = { count: 0, since: now };
+  const a = inviteFailures.get(key);
+  if (a && a.count >= INVITE_MAX_WRONG) throw tooManyCodes(a.since, now);
+  if (inviteGlobal.count >= INVITE_MAX_WRONG_ALL) throw tooManyCodes(inviteGlobal.since, now);
+}
+
+export function countInviteFailure(key: string, now: number): void {
+  inviteGlobal.count++;
+  const a = inviteFailures.get(key);
+  if (a) a.count++;
+  else {
+    while (inviteFailures.size >= INVITE_MAX_TRACKED) inviteFailures.delete(inviteFailures.keys().next().value as string);
+    inviteFailures.set(key, { count: 1, since: now });
+  }
+}
+
 /** The invite if it is still usable now, else null. */
 export function findUsableInvite(env: Env, code: string): { kind: InviteKind } | null {
   return env.DB.prepare(

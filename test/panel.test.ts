@@ -327,6 +327,51 @@ describe("panel API", () => {
     expect((await audits("unsuspend")).at(-1)).toMatchObject({ actor: OWNER, user_id: userId });
   });
 
+  it("a suspended account's kept sessions can only read, sign out and delete the account", async () => {
+    const { token, userId } = await registerUser("frozen@x.com");
+    const { token: other } = await registerUser("frozen2@x.com");
+    expect((await panel("POST", `/admin/api/team/${userId}/suspend`, { suspended: true })).status).toBe(200);
+    const blocked: [string, string][] = [
+      ["PUT", "/v1/keypage"],
+      ["PUT", "/v1/account/username"],
+      ["PUT", "/v1/account/password"],
+      ["PUT", "/v1/account/recovery"],
+      ["POST", "/v1/account/two-step/start"],
+      ["POST", "/v1/account/two-step/confirm"],
+      ["POST", "/v1/account/two-step/disable"],
+      ["POST", "/v1/account/two-step/backup-codes"],
+      ["DELETE", `/v1/devices/${uuid()}`],
+    ];
+    for (const [method, path] of blocked) {
+      const res = await call(method, path, {}, token);
+      expect([res.status, (await j(res)).error], `${method} ${path}`).toEqual([403, "account_suspended"]);
+    }
+    expect((await call("GET", "/v1/account", undefined, token)).status).toBe(200);
+    expect((await call("GET", "/v1/devices", undefined, token)).status).toBe(200);
+    // Deleting your own account still works (it still needs the password).
+    expect((await call("DELETE", "/v1/account", {}, token)).status).toBe(400);
+    // Another account is untouched.
+    expect((await call("PUT", "/v1/account/username", { username: "frozen-two" }, other)).status).toBe(200);
+
+    expect((await panel("POST", `/admin/api/team/${userId}/suspend`, { suspended: false })).status).toBe(200);
+    for (const [method, path] of blocked) {
+      const res = await call(method, path, {}, token);
+      expect(res.status, `${method} ${path}`).not.toBe(403);
+    }
+    expect((await call("PUT", "/v1/account/username", { username: "frozen-one" }, token)).status).toBe(200);
+
+    expect((await panel("POST", `/admin/api/team/${userId}/suspend`, { suspended: true })).status).toBe(200);
+    expect((await call("DELETE", "/v1/account", { authKey: b64(bytes(32, 1)) }, token)).status).toBe(204);
+    expect(await env.DB.prepare("SELECT 1 FROM users WHERE id = ?").bind(userId).first()).toBeNull();
+  });
+
+  it("a suspended account can sign out", async () => {
+    const { token, userId } = await registerUser("frozen3@x.com");
+    expect((await panel("POST", `/admin/api/team/${userId}/suspend`, { suspended: true })).status).toBe(200);
+    expect((await call("POST", "/v1/logout", undefined, token)).status).toBe(204);
+    expect((await call("GET", "/v1/account", undefined, token)).status).toBe(401);
+  });
+
   it("remove deletes the account and everything it owns, and is audited", async () => {
     const { token, userId } = await registerUser("del@x.com");
     await push(token);
@@ -504,7 +549,12 @@ describe("owner login in settings", () => {
     expect((await j(await signInOwner())).error).toBe("code_required");
     expect((await signInOwner(await totpAt(key, stepAt(Date.now()) + 1))).status).toBe(200);
     expect((await panel("POST", "/admin/api/owner/totp/disable", { password: "wrong password!!" })).status).toBe(401);
-    expect((await panel("POST", "/admin/api/owner/totp/disable", { password: PW })).status).toBe(200);
+    expect((await j(await panel("POST", "/admin/api/owner/totp/disable", { password: PW }))).error).toBe("code_required");
+    expect((await panel("POST", "/admin/api/owner/totp/disable", { password: PW, code: "000000" })).status).toBe(401);
+    expect((await audits("totp_off")).length).toBe(0);
+    // Sign-in spent the next step; let the current one be used again.
+    await env.DB.prepare("UPDATE owner SET totp_last_step = NULL WHERE id = 1").run();
+    expect((await panel("POST", "/admin/api/owner/totp/disable", { password: PW, code: await totpAt(key, stepAt(Date.now())) })).status).toBe(200);
     expect((await audits("totp_off")).length).toBe(1);
     expect((await signInOwner()).status).toBe(200);
   });

@@ -209,6 +209,25 @@ describe("account management", () => {
     expect(((await r.json()) as any).wrappedVaultKeyRecovery).toBe(before);
     expect(await get()).toBe(before);
   });
+
+  it("a sign-in whose password check passed makes no session once the password has changed", async () => {
+    const { token, userId } = await registerUser("pwrace@x.com");
+    const db = env.DB as unknown as { batch: (s: unknown[]) => Promise<unknown> };
+    const original = db.batch;
+    // Hold the sign-in at its session write and change the password in between.
+    db.batch = async function (this: unknown, stmts: unknown[]) {
+      delete (db as { batch?: unknown }).batch;
+      expect((await call("PUT", "/v1/account/password", pwBody(), token)).status).toBe(204);
+      return original.call(env.DB, stmts);
+    };
+    try {
+      const res = await login("pwrace@x.com");
+      expect([res.status, ((await res.json()) as any).error]).toEqual([401, "invalid_credentials"]);
+    } finally {
+      delete (db as { batch?: unknown }).batch;
+    }
+    expect(await count("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?", userId)).toBe(1);
+  });
 });
 
 describe("password checks behind a session token", () => {
